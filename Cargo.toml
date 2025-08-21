@@ -1,0 +1,19 @@
+[package]
+name = "polars-formula"
+version = "0.1.0"
+edition = "2021"
+authors = ["Alex H <alex@example.com>"]
+license = "MIT"
+description = "High-performance formula parsing and materialization library for Polars DataFrames with R-style syntax"
+readme = "README.md"
+homepage = "https://github.com/alexh/polars-formula"
+repository = "https://github.com/alexh/polars-formula"
+documentation = "https://docs.rs/polars-formula"
+keywords = ["polars", "formula", "statistics", "regression", "dataframe"]
+categories = ["science", "data-structures"]
+rust-version = "1.70"
+
+[dependencies]
+faer = "0.22.6"
+polars = "0.50.0"
+thiserror = "2.0.16"
