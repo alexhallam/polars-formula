@@ -2,9 +2,9 @@
 name = "polars-formula"
 version = "0.1.0"
 edition = "2021"
-authors = ["Alex H <alex@example.com>"]
+authors = ["Alex H <alexhallam6.28@gmail.com>"]
 license = "MIT"
-description = "High-performance formula parsing and materialization library for Polars DataFrames with R-style syntax"
+description = "High-performance formula parsing and materialization library for Polars DataFrames with R/Formulaic/Patsy style syntax"
 readme = "README.md"
 homepage = "https://github.com/alexh/polars-formula"
 repository = "https://github.com/alexh/polars-formula"
