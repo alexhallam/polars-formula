@@ -130,37 +130,17 @@
 //! # }
 //! ```
 //!
-//! ### Without Intercept
-//!
-//! ```rust
-//! use polars::prelude::*;
-//! use polars_formula::{Formula, MaterializeOptions};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let df = df!(
-//!     "y" => [1.0, 2.0, 3.0],
-//!     "x" => [1.0, 2.0, 3.0]
-//! )?;
-//!
-//! let formula = Formula::parse("y ~ x")?;
-//! let options = MaterializeOptions {
-//!     rhs_intercept: false,
-//!     ..Default::default()
-//! };
-//! let (y, X) = formula.materialize(&df, options)?;
-//!
-//! // X contains only: [x] (no intercept)
-//! # Ok(())
-//! # }
-//! ```
-//!
 //! ### Converting to Linear Algebra Matrices
 //!
-//! ```rust
-//! use polars::prelude::*;
-//! use polars_formula::{Formula, MaterializeOptions, polars_to_faer, series_to_faer_col};
+//! Note: the following example requires the `faer` feature.
 //!
+//! ```rust
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! # #[cfg(feature = "faer")]
+//! # {
+//! # use polars::prelude::*;
+//! # use polars_formula::{Formula, MaterializeOptions, polars_to_faer, series_to_faer_col};
+//!
 //! let df = df!(
 //!     "y" => [1.0, 2.0, 3.0, 4.0],
 //!     "x1" => [1.0, 2.0, 3.0, 4.0],
@@ -179,6 +159,7 @@
 //!
 //! // Now you can perform linear algebra operations
 //! // let coefficients = (X_matrix.transpose() * &X_matrix).inverse()? * X_matrix.transpose() * &y_vector;
+//! # }
 //! # Ok(())
 //! # }
 //! ```
@@ -263,16 +244,15 @@ use thiserror::Error;
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let df = df!(
-///     "yield" => [20.0, 25.0, 30.0, 35.0],
-///     "fertilizer" => [1.0, 2.0, 1.0, 2.0],
-///     "water" => [10.0, 10.0, 20.0, 20.0]
+///     "outcome" => [10.0, 20.0, 30.0, 40.0],
+///     "treatment" => [1.0, 0.0, 1.0, 0.0],
+///     "dose" => [5.0, 5.0, 10.0, 10.0]
 /// )?;
 ///
-/// let formula = Formula::parse("yield ~ fertilizer + water + fertilizer:water")?;
+/// let formula = Formula::parse("outcome ~ treatment + dose + treatment:dose")?;
 /// let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
 ///
-/// // X contains [Intercept, fertilizer, water, fertilizer:water]
-/// assert_eq!(X.width(), 4);
+/// // X contains: [Intercept, treatment, dose, treatment:dose]
 /// # Ok(())
 /// # }
 /// ```
@@ -776,6 +756,7 @@ impl Default for MaterializeOptions {
 /// - Any column cannot be converted to `f64`
 /// - The DataFrame contains non-contiguous data (call `.rechunk()` first)
 /// - Memory allocation fails for large matrices
+#[cfg(feature = "faer")]
 pub fn polars_to_faer(df: &DataFrame) -> Result<faer::Mat<f64>, Error> {
     use faer::Mat;
 
@@ -899,6 +880,7 @@ pub fn polars_to_faer(df: &DataFrame) -> Result<faer::Mat<f64>, Error> {
 /// - The Series cannot be converted to `f64`
 /// - The Series contains non-contiguous data (call `.rechunk()` first)
 /// - Memory allocation fails for large vectors
+#[cfg(feature = "faer")]
 pub fn series_to_faer_col(y: &Series) -> Result<faer::Col<f64>, Error> {
     use faer::Col;
 
@@ -2008,6 +1990,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "faer")]
     fn test_faer_conversion() {
         let df = df!(
             "y" => [1.0, 2.0, 3.0],
