@@ -15,9 +15,6 @@
 //! - **Polynomial Terms**: Support for polynomial expansions with `poly(x, degree)`
 //! - **Interactions**: Automatic handling of interaction terms using `:`
 //! - **Intercept Control**: Flexible intercept inclusion/exclusion
-//! - **High Performance**: Built on Polars
-//! - **Linear Algebra Ready**: Direct conversion to faer matrices
-//!
 //! ## Quick Start
 //!
 //! ```rust
