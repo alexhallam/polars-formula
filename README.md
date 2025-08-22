@@ -29,30 +29,14 @@ faer = "0.22" # Optional, for linear algebra integration
 
 ## 🏃‍♂️ Quick Start
 
-```rust
-use polars::prelude::*;
-use polars_formula::{Formula, MaterializeOptions};
+### Run Exmple with Cargo
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create sample data
-    let df = df!(
-        "y" => [1.0, 2.0, 3.0, 4.0, 5.0],
-        "x1" => [1.0, 2.0, 3.0, 4.0, 5.0],
-        "x2" => [2.0, 3.0, 4.0, 5.0, 6.0]
-    )?;
-
-    // Parse a formula
-    let formula = Formula::parse("y ~ x1 + x2")?;
-
-    // Materialize the formula into design matrices
-    let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
-
-    println!("Response variable: {:?}", y);
-    println!("Design matrix: {:?}", X);
-    // Column names are automatically cleaned: "intercept", "x1", "x2"
-    Ok(())
-}
+```bash
+git clone https://github.com/alexh/polars-formula.git
+cd polars-formula
+cargo run --example clean_names_demo
 ```
+
 
 ## 🎯 Supported Formula Syntax
 
