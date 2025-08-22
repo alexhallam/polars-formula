@@ -13,7 +13,7 @@ A high-performance formula parsing and materialization library for Rust that bri
 - **🔗 Interactions**: Automatic handling of interaction terms using `:`
 - **🎯 Intercept Control**: Flexible intercept inclusion/exclusion
 - **🧹 Clean Column Names**: Automatic cleaning of complex column names for better usability
-- **🧮 Linear Algebra Ready**: Direct conversion to [faer](https://github.com/sarah-quinones/faer-rs) matrices
+- **🧮 Linear Algebra Ready**: Direct conversion to [faer](https://github.com/sarah-quinones/faer-rs) matrices (optional feature)
 - **📚 Rich Documentation**: Comprehensive examples and API documentation
 
 ## 📦 Installation
@@ -24,7 +24,13 @@ Add this to your `Cargo.toml`:
 [dependencies]
 polars-formula = "0.1"
 polars = { version = "0.50", features = ["lazy"] }
-faer = "0.22" # Optional, for linear algebra integration
+```
+
+To enable linear algebra conversions to `faer`, turn on the optional feature:
+
+```toml
+[dependencies]
+polars-formula = { version = "0.1", features = ["faer"] }
 ```
 
 ## 🏃‍♂️ Quick Start
@@ -115,7 +121,7 @@ let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
 // X contains: [intercept, treatment, dose, treatment_dose] (names are cleaned by default)
 ```
 
-### Integration with Linear Algebra
+### Integration with Linear Algebra (optional `faer` feature)
 
 ```rust
 use polars::prelude::*;
@@ -199,53 +205,10 @@ assert_eq!(cleaned, "poly_x_2_1");
 
 ## 🎛️ Advanced Usage
 
-### Complex Formulas
+- **Custom Intercept Name**: Control `intercept_name` in `MaterializeOptions`
+- **Disable Cleaning**: Set `clean_names: false` to preserve original expressions
 
-```rust
-// Combine polynomials with interactions
-let formula = Formula::parse("sales ~ poly(advertising, 2) + price + advertising:price")?;
-
-// Grouped interactions
-let formula = Formula::parse("yield ~ (fertilizer + water):temperature")?;
-
-// Multiple polynomial terms
-let formula = Formula::parse("response ~ poly(x1, 3) + poly(x2, 2) + x1:x2")?;
-```
-
-### Error Handling
-
-```rust
-use polars_formula::{Formula, Error};
-
-match Formula::parse("invalid ~~ syntax") {
-    Err(Error::Lex { pos, msg }) => {
-        println!("Lexical error at position {}: {}", pos, msg);
-    }
-    Err(Error::Parse { pos, msg }) => {
-        println!("Parse error at token {:?}: {}", pos, msg);
-    }
-    Err(Error::Semantic(msg)) => {
-        println!("Semantic error: {}", msg);
-    }
-    Ok(formula) => {
-        // Formula parsed successfully
-    }
-}
-```
-
-## 🔮 Planned Features
-
-Future versions will include:
-
-- **Categorical Variables**: `C(category)` for factor encoding
-- **Term Removal**: `-x` to remove terms from expansions  
-- **Nested Effects**: `x/y` for nested structures
-- **Dot Expansion**: `.` to include all available variables
-- **Spline Functions**: Smooth function approximations
-- **Lag Operations**: Time series support
-- **Custom Functions**: User-defined transformations
-
-## 🔬 Performance
+## 🧪 Performance
 
 polars-formula is built on top of Polars, one of the fastest DataFrame libraries available. Key performance characteristics:
 
@@ -253,19 +216,12 @@ polars-formula is built on top of Polars, one of the fastest DataFrame libraries
 - **Parallel computation**: Benefits from Polars' multi-threading
 - **Lazy evaluation**: Supports Polars' lazy API patterns
 - **SIMD optimizations**: Inherits Polars' vectorized operations
-- **Memory efficient**: Minimal allocations during materialization
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
+## 📦 Dependencies
 
 - **Polars**: For providing the foundational DataFrame library
-- **faer**: For high-performance linear algebra capabilities
-- **R Formula Interface**: For inspiring the syntax design
-- **Python Patsy/Formulaic**: For additional syntax inspiration
+- **faer**: For high-performance linear algebra capabilities (optional via feature)
+
+## 📜 License
+
+MIT
