@@ -15,7 +15,7 @@
 //! - **Polynomial Terms**: Support for polynomial expansions with `poly(x, degree)`
 //! - **Interactions**: Automatic handling of interaction terms using `:`
 //! - **Intercept Control**: Flexible intercept inclusion/exclusion
-//! - **High Performance**: Built on Polars for maximum efficiency
+//! - **High Performance**: Built on Polars
 //! - **Linear Algebra Ready**: Direct conversion to faer matrices
 //!
 //! ## Quick Start
@@ -494,7 +494,7 @@ impl Formula {
 ///
 /// # Examples
 ///
-/// ## Default Options (with intercept)
+/// ## Default Options (with intercept and clean names)
 /// ```rust
 /// use polars::prelude::*;
 /// use polars_formula::{Formula, MaterializeOptions};
@@ -508,9 +508,9 @@ impl Formula {
 /// let formula = Formula::parse("y ~ x")?;
 /// let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
 ///
-/// // X contains: [Intercept, x]
+/// // X contains: [intercept, x] (names are cleaned by default)
 /// assert_eq!(X.width(), 2);
-/// assert!(X.get_column_names().iter().any(|s| s.as_str() == "Intercept"));
+/// assert!(X.get_column_names().iter().any(|s| s.as_str() == "intercept"));
 /// # Ok(())
 /// # }
 /// ```
@@ -533,9 +533,35 @@ impl Formula {
 /// };
 /// let (y, X) = formula.materialize(&df, opts)?;
 ///
-/// // X contains only: [x]
+/// // X contains only: [x] (names are cleaned by default)
 /// assert_eq!(X.width(), 1);
-/// assert!(!X.get_column_names().iter().any(|s| s.as_str() == "Intercept"));
+/// assert!(!X.get_column_names().iter().any(|s| s.as_str() == "intercept"));
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## Without Clean Column Names
+/// ```rust
+/// use polars::prelude::*;
+/// use polars_formula::{Formula, MaterializeOptions};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let df = df!(
+///     "y" => [1.0, 2.0, 3.0],
+///     "x" => [1.0, 2.0, 3.0]
+/// )?;
+///
+/// let formula = Formula::parse("y ~ poly(x,2)")?;
+/// let opts = MaterializeOptions {
+///     clean_names: false,
+///     ..Default::default()
+/// };
+/// let (y, X) = formula.materialize(&df, opts)?;
+///
+/// // X contains: [Intercept, poly(x,2)^1, poly(x,2)^2] (original names)
+/// assert_eq!(X.width(), 3);
+/// assert!(X.get_column_names().iter().any(|s| s.as_str() == "Intercept"));
+/// assert!(X.get_column_names().iter().any(|s| s.as_str() == "poly(x,2)^1"));
 /// # Ok(())
 /// # }
 /// ```
@@ -555,11 +581,12 @@ impl Formula {
 /// let opts = MaterializeOptions {
 ///     rhs_intercept: true,
 ///     intercept_name: "Constant",
+///     clean_names: true,
 /// };
 /// let (y, X) = formula.materialize(&df, opts)?;
 ///
-/// // X contains: [Constant, x]
-/// assert!(X.get_column_names().iter().any(|s| s.as_str() == "Constant"));
+/// // X contains: [constant, x] (names are cleaned by default)
+/// assert!(X.get_column_names().iter().any(|s| s.as_str() == "constant"));
 /// # Ok(())
 /// # }
 /// ```
@@ -611,6 +638,30 @@ pub struct MaterializeOptions {
     /// assert_eq!(opts_custom.intercept_name, "Constant");
     /// ```
     pub intercept_name: &'static str,
+
+    /// Whether to clean column names using `make_clean_names()`.
+    ///
+    /// When `true` (default), applies the `make_clean_names()` function to all column names
+    /// in the resulting design matrix. This makes column names more user-friendly
+    /// by converting special characters to underscores and using lowercase.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use polars_formula::MaterializeOptions;
+    ///
+    /// // With cleaning (default)
+    /// let opts_default = MaterializeOptions::default();
+    /// assert_eq!(opts_default.clean_names, true);
+    ///
+    /// // Without cleaning
+    /// let opts_no_clean = MaterializeOptions {
+    ///     clean_names: false,
+    ///     ..Default::default()
+    /// };
+    /// assert_eq!(opts_no_clean.clean_names, false);
+    /// ```
+    pub clean_names: bool,
 }
 
 impl Default for MaterializeOptions {
@@ -618,6 +669,7 @@ impl Default for MaterializeOptions {
         Self {
             rhs_intercept: true,
             intercept_name: "Intercept",
+            clean_names: true,
         }
     }
 }
@@ -862,6 +914,151 @@ pub fn series_to_faer_col(y: &Series) -> Result<faer::Col<f64>, Error> {
     Ok(col)
 }
 
+/// Clean column names to be more user-friendly and consistent.
+///
+/// This function transforms column names to follow consistent naming conventions,
+/// making them easier to work with in code. It handles special characters,
+/// spaces, and creates predictable names for complex expressions.
+///
+/// # Transformations Applied
+///
+/// - **Special characters**: `^`, `(`, `)`, `,`, `:`, `+`, `-`, `*`, `/` → `_`
+/// - **Spaces and tabs**: → `_`
+/// - **Multiple underscores**: Collapsed to single `_`
+/// - **Leading/trailing underscores**: Removed
+/// - **Case**: Converted to lowercase
+/// - **Polynomial terms**: `poly(x,2)^1` → `poly_x_2_1`
+/// - **Interaction terms**: `x1:x2` → `x1_x2`
+///
+/// # Arguments
+///
+/// * `name` - The original column name to clean
+///
+/// # Returns
+///
+/// Returns a cleaned version of the column name that is safe for use in code.
+///
+/// # Examples
+///
+/// ## Basic Cleaning
+/// ```rust
+/// use polars_formula::make_clean_names;
+///
+/// assert_eq!(make_clean_names("My Column"), "my_column");
+/// assert_eq!(make_clean_names("x1:x2"), "x1_x2");
+/// assert_eq!(make_clean_names("poly(x,2)^1"), "poly_x_2_1");
+/// ```
+///
+/// ## Complex Expressions
+/// ```rust
+/// use polars_formula::make_clean_names;
+///
+/// // Polynomial terms
+/// assert_eq!(make_clean_names("poly(income,3)^2"), "poly_income_3_2");
+/// assert_eq!(make_clean_names("poly(age,2)^1"), "poly_age_2_1");
+///
+/// // Interaction terms
+/// assert_eq!(make_clean_names("treatment:dose"), "treatment_dose");
+/// assert_eq!(make_clean_names("(x1+x2):z"), "x1_x2_z");
+///
+/// // Special characters
+/// assert_eq!(make_clean_names("Column Name!"), "column_name");
+/// assert_eq!(make_clean_names("x@#$%"), "x");
+/// ```
+///
+/// ## Formula Materialization Integration
+/// ```rust
+/// use polars::prelude::*;
+/// use polars_formula::{Formula, MaterializeOptions, make_clean_names};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let df = df!(
+///     "y" => [1.0, 2.0, 3.0],
+///     "x" => [1.0, 2.0, 3.0]
+/// )?;
+///
+/// let formula = Formula::parse("y ~ poly(x,2)")?;
+/// let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
+///
+/// // Clean the column names
+/// let cleaned_names: Vec<String> = X.get_column_names()
+///     .iter()
+///     .map(|name| make_clean_names(name.as_str()))
+///     .collect();
+///
+/// println!("Original: {:?}", X.get_column_names());
+/// println!("Cleaned: {:?}", cleaned_names);
+/// // Original: ["Intercept", "poly(x,2)^1", "poly(x,2)^2"]
+/// // Cleaned: ["intercept", "poly_x_2_1", "poly_x_2_2"]
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Notes
+///
+/// - This function is inspired by the R janitor package's `make_clean_names`
+/// - Cleaned names are safe for use in most programming contexts
+/// - The function preserves the semantic meaning while improving usability
+/// - For DataFrames with many columns, consider applying this to all column names
+pub fn make_clean_names(name: &str) -> String {
+    let mut result = String::new();
+    let mut prev_was_underscore = false;
+
+    for ch in name.chars() {
+        let is_special = matches!(
+            ch,
+            '^' | '('
+                | ')'
+                | ','
+                | ':'
+                | '+'
+                | '-'
+                | '*'
+                | '/'
+                | ' '
+                | '\t'
+                | '\n'
+                | '\r'
+                | '!'
+                | '@'
+                | '#'
+                | '$'
+                | '%'
+                | '&'
+                | '='
+                | '['
+                | ']'
+                | '{'
+                | '}'
+                | '|'
+                | '\\'
+                | '`'
+                | '~'
+        );
+
+        if is_special {
+            if !prev_was_underscore {
+                result.push('_');
+                prev_was_underscore = true;
+            }
+        } else if ch.is_alphanumeric() || ch == '_' {
+            result.push(ch.to_ascii_lowercase());
+            prev_was_underscore = false;
+        }
+        // Skip other characters entirely
+    }
+
+    // Remove leading and trailing underscores
+    result = result.trim_matches('_').to_string();
+
+    // Handle empty result
+    if result.is_empty() {
+        result = "column".to_string();
+    }
+
+    result
+}
+
 /// Low-level function to materialize a parsed AST against a DataFrame.
 ///
 /// This function is used internally by `Formula::materialize()` but is exposed
@@ -947,8 +1144,16 @@ pub fn materialize_dataframe(
         } else {
             name
         };
+
+        // Apply name cleaning if requested
+        let final_name = if opts.clean_names {
+            make_clean_names(&unique_name)
+        } else {
+            unique_name
+        };
+
         let mut new_series = s.clone();
-        new_series.rename(unique_name.into());
+        new_series.rename(final_name.into());
         unique_series.push(new_series.into());
     }
 
@@ -1740,15 +1945,15 @@ mod tests {
         assert_eq!(x.width(), 5);
         assert_eq!(x.height(), 3);
 
-        // Check column names
-        let expected_columns = vec!["Intercept", "x1", "poly(x2,2)^1", "poly(x2,2)^2", "x1:x2"];
+        // Check column names (cleaned by default)
+        let expected_columns = vec!["intercept", "x1", "poly_x2_2_1", "poly_x2_2_2", "x1_x2"];
 
         for (i, expected_name) in expected_columns.iter().enumerate() {
             assert_eq!(x.get_columns()[i].name(), *expected_name);
         }
 
         // Test specific values
-        let intercept_col = x.column("Intercept").expect("Intercept column not found");
+        let intercept_col = x.column("intercept").expect("intercept column not found");
         assert_eq!(intercept_col.f64().unwrap().get(0), Some(1.0));
         assert_eq!(intercept_col.f64().unwrap().get(2), Some(1.0));
 
@@ -1757,18 +1962,18 @@ mod tests {
         assert_eq!(x1_col.f64().unwrap().get(2), Some(3.0));
 
         let poly1_col = x
-            .column("poly(x2,2)^1")
-            .expect("poly(x2,2)^1 column not found");
+            .column("poly_x2_2_1")
+            .expect("poly_x2_2_1 column not found");
         assert_eq!(poly1_col.f64().unwrap().get(0), Some(1.0));
         assert_eq!(poly1_col.f64().unwrap().get(2), Some(3.0));
 
         let poly2_col = x
-            .column("poly(x2,2)^2")
-            .expect("poly(x2,2)^2 column not found");
+            .column("poly_x2_2_2")
+            .expect("poly_x2_2_2 column not found");
         assert_eq!(poly2_col.f64().unwrap().get(0), Some(1.0)); // 1.0^2 = 1.0
         assert_eq!(poly2_col.f64().unwrap().get(2), Some(9.0)); // 3.0^2 = 9.0
 
-        let interaction_col = x.column("x1:x2").expect("x1:x2 column not found");
+        let interaction_col = x.column("x1_x2").expect("x1_x2 column not found");
         assert_eq!(interaction_col.f64().unwrap().get(0), Some(1.0)); // 1.0 * 1.0 = 1.0
         assert_eq!(interaction_col.f64().unwrap().get(2), Some(9.0)); // 3.0 * 3.0 = 9.0
     }
@@ -1788,6 +1993,7 @@ mod tests {
         let opts = MaterializeOptions {
             rhs_intercept: false,
             intercept_name: "Intercept",
+            clean_names: false,
         };
 
         let (y, x) = f
@@ -1854,5 +2060,59 @@ mod tests {
         // Test invalid formula
         assert!(Formula::parse("y ~ x1 +").is_err()); // Incomplete expression
         assert!(Formula::parse("y ~ poly(x1,)").is_err()); // Incomplete function call
+    }
+
+    #[test]
+    fn test_make_clean_names() {
+        // Basic cleaning
+        assert_eq!(make_clean_names("My Column"), "my_column");
+        assert_eq!(make_clean_names("x1:x2"), "x1_x2");
+        assert_eq!(make_clean_names("poly(x,2)^1"), "poly_x_2_1");
+
+        // Polynomial terms
+        assert_eq!(make_clean_names("poly(income,3)^2"), "poly_income_3_2");
+        assert_eq!(make_clean_names("poly(age,2)^1"), "poly_age_2_1");
+
+        // Interaction terms
+        assert_eq!(make_clean_names("treatment:dose"), "treatment_dose");
+        assert_eq!(make_clean_names("(x1+x2):z"), "x1_x2_z");
+
+        // Special characters
+        assert_eq!(make_clean_names("Column Name!"), "column_name");
+        assert_eq!(make_clean_names("x@#$%"), "x");
+
+        // Edge cases
+        assert_eq!(make_clean_names(""), "column");
+        assert_eq!(make_clean_names("___"), "column");
+        assert_eq!(make_clean_names("   "), "column");
+    }
+
+    #[test]
+    fn test_formula_with_clean_names() -> Result<(), Box<dyn std::error::Error>> {
+        let df = df!(
+            "y" => [1.0, 2.0, 3.0],
+            "x" => [1.0, 2.0, 3.0]
+        )
+        .expect("Failed to create test DataFrame");
+
+        let formula = Formula::parse("y ~ poly(x,2)")?;
+        let opts = MaterializeOptions {
+            clean_names: true,
+            ..Default::default()
+        };
+        let (y, X) = formula.materialize(&df, opts)?;
+
+        // Check that names are cleaned
+        let column_names: Vec<&str> = X.get_column_names().iter().map(|s| s.as_str()).collect();
+        assert!(column_names.contains(&"intercept"));
+        assert!(column_names.contains(&"poly_x_2_1"));
+        assert!(column_names.contains(&"poly_x_2_2"));
+
+        // Original names should not be present
+        assert!(!column_names.contains(&"Intercept"));
+        assert!(!column_names.contains(&"poly(x,2)^1"));
+        assert!(!column_names.contains(&"poly(x,2)^2"));
+
+        Ok(())
     }
 }

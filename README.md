@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/polars-formula/badge.svg)](https://docs.rs/polars-formula)
 [![License](https://img.shields.io/crates/l/polars-formula.svg)](LICENSE)
 
-A high-performance formula parsing and materialization library for Rust that brings R-style and Python Patsy/Formulaic formula syntax to the Polars DataFrame ecosystem.
+A high-performance formula parsing and materialization library for Rust that brings R-style/Patsy/Formulaic formula syntax to the Polars DataFrame ecosystem.
 
 ## 🚀 Features
 
@@ -12,8 +12,8 @@ A high-performance formula parsing and materialization library for Rust that bri
 - **🔢 Polynomial Terms**: Support for polynomial expansions with `poly(x, degree)`
 - **🔗 Interactions**: Automatic handling of interaction terms using `:`
 - **🎯 Intercept Control**: Flexible intercept inclusion/exclusion
-- **⚡ High Performance**: Built on Polars for maximum efficiency
-- **🧮 Linear Algebra Ready**: Direct conversion to faer matrices
+- **🧹 Clean Column Names**: Automatic cleaning of complex column names for better usability
+- **🧮 Linear Algebra Ready**: Direct conversion to [faer](https://github.com/sarah-quinones/faer-rs) matrices
 - **📚 Rich Documentation**: Comprehensive examples and API documentation
 
 ## 📦 Installation
@@ -49,6 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Response variable: {:?}", y);
     println!("Design matrix: {:?}", X);
+    // Column names are automatically cleaned: "intercept", "x1", "x2"
     Ok(())
 }
 ```
@@ -88,7 +89,7 @@ let df = df!(
 let formula = Formula::parse("price ~ size + age")?;
 let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
 
-// X now contains: [Intercept, size, age]
+// X now contains: [intercept, size, age] (names are cleaned by default)
 println!("Design matrix shape: {}x{}", X.height(), X.width());
 ```
 
@@ -107,7 +108,7 @@ let df = df!(
 let formula = Formula::parse("y ~ poly(x, 3)")?;
 let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
 
-// X contains: [Intercept, x, x², x³]
+// X contains: [intercept, x, x², x³] (names are cleaned by default)
 println!("Polynomial features: {:?}", X.get_column_names());
 ```
 
@@ -127,7 +128,7 @@ let df = df!(
 let formula = Formula::parse("outcome ~ treatment + dose + treatment:dose")?;
 let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
 
-// X contains: [Intercept, treatment, dose, treatment:dose]
+// X contains: [intercept, treatment, dose, treatment_dose] (names are cleaned by default)
 ```
 
 ### Integration with Linear Algebra
@@ -177,6 +178,39 @@ let opts_custom = MaterializeOptions {
     intercept_name: "Constant",
     ..Default::default()
 };
+```
+
+### Clean Column Names
+
+Column names are automatically cleaned by default for better usability:
+
+```rust
+use polars_formula::{Formula, MaterializeOptions, make_clean_names};
+
+let df = df!(
+    "y" => [1.0, 2.0, 3.0],
+    "x" => [1.0, 2.0, 3.0]
+)?;
+
+let formula = Formula::parse("y ~ poly(x,2)")?;
+
+// With clean names (default)
+let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
+println!("Cleaned names: {:?}", X.get_column_names());
+// Output: ["intercept", "poly_x_2_1", "poly_x_2_2"]
+
+// Without clean names
+let opts = MaterializeOptions {
+    clean_names: false,
+    ..Default::default()
+};
+let (y, X) = formula.materialize(&df, opts)?;
+println!("Original names: {:?}", X.get_column_names());
+// Output: ["Intercept", "poly(x,2)^1", "poly(x,2)^2"]
+
+// Manual cleaning
+let cleaned = make_clean_names("poly(x,2)^1");
+assert_eq!(cleaned, "poly_x_2_1");
 ```
 
 ## 🎛️ Advanced Usage
