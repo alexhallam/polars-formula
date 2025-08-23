@@ -413,15 +413,29 @@ pub fn parser() -> impl Parser<char, ModelSpec, Error = Simple<char>> {
             .to(Aterm::Mi),
     ));
 
-    let aterm_chain = aterm
-        .clone()
-        .separated_by(choice((just(','), just('|'))))
-        .collect::<Vec<_>>();
+    let aterm_chain = aterm.clone().separated_by(just(',')).collect::<Vec<_>>();
 
     let response = response_basic
         .clone()
-        .then(just('|').ignore_then(aterm_chain.clone()).or_not())
-        .map(|(base, chain)| (base, chain.unwrap_or_default()))
+        .then(just('|').padded().ignore_then(aterm_chain.clone()).or_not())
+        .map(|(base, chain)| {
+            let chain = chain.unwrap_or_default();
+            // Handle y | trials(n) syntax
+            if chain.len() == 1 {
+                if let Aterm::Trials(trials_expr) = &chain[0] {
+                    if let Response::Var(successes_var) = base {
+                        return (
+                            Response::BinomialTrials {
+                                successes: Expr::Var(successes_var),
+                                trials: trials_expr.clone(),
+                            },
+                            vec![],
+                        );
+                    }
+                }
+            }
+            (base, chain)
+        })
         .or(response_basic.clone().map(|base| (base, vec![])));
 
     // RHS
@@ -539,7 +553,7 @@ pub fn parser() -> impl Parser<char, ModelSpec, Error = Simple<char>> {
 
     // Parse the main formula structure
     choice((
-        // Full formula with dpars and autocor: [header] response ~ rhs + dpar1 ~ rhs1 + autocor1 + ...
+        // Full formula with dpars and autocor: [header] response ~ rhs + dpar1 ~ rhs1 + autocor1 + ... [, trailing_header]
         header
             .clone()
             .or_not()
@@ -551,18 +565,23 @@ pub fn parser() -> impl Parser<char, ModelSpec, Error = Simple<char>> {
             )
             .then(just('+').ignore_then(dpar_formula.clone()).repeated())
             .then(just('+').ignore_then(autocor_call.clone()).repeated())
+            .then(just(',').padded().ignore_then(header.clone()).or_not())
             .then_ignore(end())
-            .map(|(((hdr, (resp, rhs)), dpars), acs)| {
-                let (lhs, aterms) = resp;
-                ModelSpec {
-                    family: hdr.as_ref().map(|(f, _)| f.clone()),
-                    link: hdr.and_then(|(_, lk)| lk),
-                    formula: Formula { lhs, rhs, aterms },
-                    dpars,
-                    autocor: acs,
-                }
-            }),
-        // Simple formula: [header] response ~ rhs
+            .map(
+                |((((leading_hdr, (resp, rhs)), dpars), acs), trailing_hdr)| {
+                    let (lhs, aterms) = resp;
+                    // Use trailing header if present, otherwise use leading header
+                    let final_hdr = trailing_hdr.or(leading_hdr);
+                    ModelSpec {
+                        family: final_hdr.as_ref().map(|(f, _)| f.clone()),
+                        link: final_hdr.and_then(|(_, lk)| lk),
+                        formula: Formula { lhs, rhs, aterms },
+                        dpars,
+                        autocor: acs,
+                    }
+                },
+            ),
+        // Simple formula: [header] response ~ rhs [, trailing_header]
         header
             .clone()
             .or_not()
@@ -572,32 +591,41 @@ pub fn parser() -> impl Parser<char, ModelSpec, Error = Simple<char>> {
                     .then_ignore(just('~').padded())
                     .then(rhs.clone()),
             )
+            .then(just(',').padded().ignore_then(header.clone()).or_not())
             .then_ignore(end())
-            .map(|(hdr, (resp, rhs))| {
+            .map(|((leading_hdr, (resp, rhs)), trailing_hdr)| {
                 let (lhs, aterms) = resp;
+                // Use trailing header if present, otherwise use leading header
+                let final_hdr = trailing_hdr.or(leading_hdr);
                 ModelSpec {
-                    family: hdr.as_ref().map(|(f, _)| f.clone()),
-                    link: hdr.and_then(|(_, lk)| lk),
+                    family: final_hdr.as_ref().map(|(f, _)| f.clone()),
+                    link: final_hdr.and_then(|(_, lk)| lk),
                     formula: Formula { lhs, rhs, aterms },
                     dpars: vec![],
                     autocor: vec![],
                 }
             }),
-        // RHS-only: [header] rhs
+        // RHS-only: [header] rhs [, trailing_header]
         header
+            .clone()
             .or_not()
             .then(rhs)
+            .then(just(',').padded().ignore_then(header.clone()).or_not())
             .then_ignore(end())
-            .map(|(hdr, rhs)| ModelSpec {
-                family: hdr.as_ref().map(|(f, _)| f.clone()),
-                link: hdr.and_then(|(_, lk)| lk),
-                formula: Formula {
-                    lhs: Response::Var("".to_string()),
-                    rhs,
-                    aterms: vec![],
-                },
-                dpars: vec![],
-                autocor: vec![],
+            .map(|((leading_hdr, rhs), trailing_hdr)| {
+                // Use trailing header if present, otherwise use leading header
+                let final_hdr = trailing_hdr.or(leading_hdr);
+                ModelSpec {
+                    family: final_hdr.as_ref().map(|(f, _)| f.clone()),
+                    link: final_hdr.and_then(|(_, lk)| lk),
+                    formula: Formula {
+                        lhs: Response::Var("".to_string()),
+                        rhs,
+                        aterms: vec![],
+                    },
+                    dpars: vec![],
+                    autocor: vec![],
+                }
             }),
     ))
 }

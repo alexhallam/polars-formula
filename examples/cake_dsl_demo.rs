@@ -26,11 +26,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Define the formula to parse
     let formula_str = "angle ~ recipe * temperature + (1 | recipe:replicate)";
     println!("2. Parsing formula: {}", formula_str);
-    
+
     // Parse the formula using the new DSL parser
     let p = parser();
     let parse_result = p.parse(formula_str);
-    
+
     match parse_result {
         Ok(spec) => {
             println!("   ✅ Formula parsed successfully!");
@@ -43,26 +43,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("   - Dpars: {:?}", spec.dpars);
             println!("   - Autocor: {:?}", spec.autocor);
             println!();
-            
+
             // Pretty print the parsed formula
             println!("3. Pretty-printed formula:");
             let pretty_output = pretty(&spec);
             println!("   {}", pretty_output);
             println!();
-            
+
             // Canonicalize the formula
             println!("4. Canonicalizing formula...");
             let canonicalized = canonicalize(&spec);
             let canonical_pretty = pretty(&canonicalized);
             println!("   Canonicalized: {}", canonical_pretty);
             println!();
-            
+
             // Try to materialize the formula
             println!("5. Materializing formula...");
             let canonicalized = canonicalize(&spec);
             let materialize_result =
                 materialize_dsl_spec(&df, &canonicalized, MaterializeOptions::default());
-            
+
             match materialize_result {
                 Ok((y, x, z)) => {
                     println!("   ✅ Materialization successful!");
@@ -72,14 +72,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("     - Type: {:?}", y.dtype());
                     println!("     - First 5 values: {:?}", y.head(Some(5)));
                     println!();
-                    
+
                     println!("   Fixed effects design matrix (X):");
                     println!("     - Shape: {} rows × {} columns", x.height(), x.width());
                     println!("     - Column names: {:?}", x.get_column_names());
                     println!("     - First 5 rows:");
                     println!("{}", x.head(Some(5)));
                     println!();
-                    
+
                     println!("   Random effects design matrix (Z):");
                     println!("     - Shape: {} rows × {} columns", z.height(), z.width());
                     println!("     - Column names: {:?}", z.get_column_names());
@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!();
                 }
             }
-            
+
             // Test roundtrip parsing
             println!("6. Testing roundtrip parsing...");
             let reparsed = p.parse(pretty_output.as_str());
@@ -107,33 +107,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Err(e) => println!("   ⚠️  Roundtrip failed: {:?}", e),
             }
             println!();
-            
         }
         Err(e) => {
             println!("   ❌ Formula parsing failed: {:?}", e);
             println!();
-            
+
             // Try parsing simpler parts to debug
             println!("   Debugging: Trying to parse simpler parts...");
-            
+
             // Try just the basic formula
             let basic_result = p.parse("angle ~ recipe");
             println!("   'angle ~ recipe': {:?}", basic_result.is_ok());
-            
+
             // Try with interaction
             let interaction_result = p.parse("angle ~ recipe * temperature");
             println!(
                 "   'angle ~ recipe * temperature': {:?}",
                 interaction_result.is_ok()
             );
-            
+
             // Try with sum
             let sum_result = p.parse("angle ~ recipe + temperature");
             println!(
                 "   'angle ~ recipe + temperature': {:?}",
                 sum_result.is_ok()
             );
-            
+
             println!();
         }
     }

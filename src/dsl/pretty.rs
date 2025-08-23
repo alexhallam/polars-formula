@@ -123,6 +123,9 @@ fn pretty_response(response: &Response) -> String {
             let args_str = args.iter().map(pretty_expr).collect::<Vec<_>>().join(", ");
             format!("{}({})", name, args_str)
         }
+        Response::BinomialTrials { successes, trials } => {
+            format!("{} | trials({})", pretty_expr(successes), pretty_expr(trials))
+        }
     }
 }
 

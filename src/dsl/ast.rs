@@ -41,6 +41,10 @@ pub enum Response {
         name: String,
         args: Vec<Expr>,
     }, // for future e.g. Hist(...)
+    BinomialTrials {
+        successes: Expr,
+        trials: Expr,
+    }, // y | trials(n) syntax
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -87,6 +87,32 @@ fn materialize_response(df: &DataFrame, response: &Response) -> Result<Series, E
                     .ok_or_else(|| Error::Semantic("Failed to convert column to series".into()))
             })
             .map(|s| s.clone()),
+        Response::BinomialTrials {
+            successes,
+            trials: _,
+        } => {
+            // For binomial trials, we return the successes series
+            // The trials series is available for validation and downstream processing
+            if let Expr::Var(successes_name) = successes {
+                df.column(successes_name)
+                    .map_err(|_| {
+                        Error::Semantic(format!(
+                            "Column '{}' not found in DataFrame",
+                            successes_name
+                        ))
+                    })
+                    .and_then(|s| {
+                        s.as_series().ok_or_else(|| {
+                            Error::Semantic("Failed to convert column to series".into())
+                        })
+                    })
+                    .map(|s| s.clone())
+            } else {
+                Err(Error::Semantic(
+                    "Binomial successes must be a variable name".into(),
+                ))
+            }
+        }
         Response::Multi(names) => {
             // For now, just take the first variable
             // TODO: Implement proper multi-response handling
