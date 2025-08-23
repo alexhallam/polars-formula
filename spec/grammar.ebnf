@@ -1,0 +1,133 @@
+(*
+  polars-formula — unified grammar
+  - Operators precedence (high → low):  ()  ^  :  /,%in%  *  +,-
+  - ':' is associative → n-ary Interaction
+*)
+
+model           ::= [ header ] formula { "+" dpar_formula }* { "+" autocor_spec }* ;
+
+header          ::= "family" "=" family_spec [ "," "link" "=" link_spec ] ;
+
+family_spec     ::= ident "(" [ arg_list ] ")"
+                  | "mixture" "(" family_spec { "," family_spec } ")"
+                  | "custom_family" "(" string { "," string } ")" ;
+
+link_spec       ::= ident | ident "(" [ arg_list ] ")" ;
+
+formula         ::= response "~" rhs ;
+
+response        ::= lhs_atom
+                  | "mvbind" "(" ident { "," ident } ")"
+                  | "cbind"  "(" ident { "," ident } ")"
+                  | "Surv"   "(" expr "," expr [ "," expr ] ")"
+                  | resp_func
+                  | response "|" aterm_chain ;
+
+resp_func       ::= ident "(" [ arg_list ] ")" ;
+
+aterm_chain     ::= aterm { ("," | "|") aterm }* ;
+
+aterm           ::= "se"      "(" expr ")"
+                  | "weights" "(" expr ")"
+                  | "trials"  "(" expr ")"
+                  | "cens"    "(" expr ")"
+                  | "trunc"   "(" [ "lb" "=" expr ] [ "," "ub" "=" expr ] ")"
+                  | "subset"  "(" expr ")"
+                  | "rate"    "(" expr ")"
+                  | "thres"   "(" [ "gr" "=" expr ] ")"
+                  | "dec"     "(" expr ")"
+                  | "cat"     "(" expr ")"
+                  | "index"   "(" expr ")"
+                  | "vreal"   "(" expr { "," expr } ")"
+                  | "vint"    "(" expr { "," expr } ")"
+                  | "mi"      "(" ")" ;
+
+lhs_atom        ::= ident ;
+
+rhs             ::= sum ;
+
+sum             ::= prod { ("+" | "-") prod }* ;
+
+prod            ::= nest { "*" nest }* ;
+
+nest            ::= inter { ("/" | "%in%") inter }* ;
+
+inter           ::= pow { ":" pow }* ;
+
+pow             ::= term [ "^" power_rhs ] ;
+power_rhs       ::= number | "(" sum ")" ;
+
+term            ::= atomic
+                  | group_term
+                  | smooth_term
+                  | func_call_or_autocor
+                  | "(" sum ")"
+                  | "I" "(" expr ")"
+                  | "0" | "1" | "." ;
+
+atomic          ::= ident | number | string | boolean ;
+
+group_term      ::= "(" group_inner "|"  group_spec ")"
+                  | "(" group_inner "||" group_spec ")"
+                  | "(" group_inner "|" "ID" "|" group_spec ")" ;
+
+group_inner     ::= "0" | "1" | sum ;
+
+group_spec      ::= group_expr | func_call ;
+
+group_expr      ::= ident { group_op ident }* ;
+group_op        ::= ":" | "/" | "+" ;
+
+smooth_term     ::= "s"  "(" varlist [ "," smooth_args ] ")"
+                  | "t2" "(" varlist [ "," smooth_args ] ")"
+                  | "te" "(" varlist [ "," smooth_args ] ")"
+                  | "ti" "(" varlist [ "," smooth_args ] ")" ;
+
+varlist         ::= ident { "," ident } ;
+
+smooth_args     ::= named_arg { "," named_arg } ;
+named_arg       ::= "k" "=" number
+                  | "bs" "=" string
+                  | "by" "=" ident
+                  | "id" "=" number
+                  | "sp" "=" number
+                  | "fx" "=" boolean
+                  | "knots" "=" expr
+                  | "xt" "=" expr
+                  | "pc" "=" number
+                  | ident "=" expr ;
+
+func_call_or_autocor ::= func_call | autocor_call ;
+
+func_call       ::= dotted_ident "(" [ arg_list ] ")" ;
+dotted_ident    ::= ident { "." ident }* ;
+
+arg_list        ::= expr { "," expr } ;
+
+dpar_formula    ::= dpar_name "~" rhs ;
+dpar_name       ::= "sigma" | "nu" | "phi" | "zi" | "hu" | "zoi" | "coi"
+                  | "kappa" | "beta" | "disc" | "bs" | "ndt" | "bias" ;
+
+autocor_spec    ::= autocor_call ;
+
+autocor_call    ::= "ar"   "(" [ "p" "=" number ] ")"
+                  | "ma"   "(" [ "q" "=" number ] ")"
+                  | "arma" "(" [ "p" "=" number ] [ "," "q" "=" number ] ")"
+                  | "cosy" "(" ")"
+                  | "unstr" "(" ")"
+                  | "sar"  "(" expr ")"
+                  | "car"  "(" expr ")"
+                  | "fcor" "(" expr ")" ;
+
+expr            ::= conditional ;
+
+conditional     ::= logical_or [ "?" expr ":" expr ] ;
+logical_or      ::= logical_and { "||" logical_and }* ;
+logical_and     ::= equality   { "&&" equality }* ;
+equality        ::= relational { ("==" | "!=") relational }* ;
+relational      ::= sum        { ("<" | "<=" | ">" | ">=") sum }* ;
+
+ident           ::= /[A-Za-z_][A-Za-z0-9_\\.]*?/ ;
+number          ::= /[0-9]+(\.[0-9]+)?/ ;
+string          ::= /"([^"\\]|\\.)*"/ ;
+boolean         ::= "true" | "false" | "TRUE" | "FALSE" ;

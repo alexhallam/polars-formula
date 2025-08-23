@@ -180,6 +180,9 @@ use std::str::FromStr;
 use polars::prelude::*;
 use thiserror::Error;
 
+// DSL module for the new comprehensive formula parser
+pub mod dsl;
+
 // --- Public surface -------------------------------------------------------
 
 /// A parsed statistical formula that can be materialized into design matrices.
@@ -1100,7 +1103,8 @@ pub fn materialize_dataframe(
 
     // --- RHS
     let mut cols = Vec::<(String, Series)>::new();
-    if opts.rhs_intercept {
+    // Add intercept unless explicitly excluded by -1 in formula or opts.rhs_intercept is false
+    if opts.rhs_intercept && !ast.exclude_intercept {
         let n = df.height();
         let ones =
             Float64Chunked::from_slice(opts.intercept_name.into(), &vec![1.0; n]).into_series();
@@ -1185,6 +1189,8 @@ pub struct Ast {
     pub lhs: Vec<Term>,
     /// Terms representing the predictor variables and transformations (right side of `~`)
     pub rhs: Vec<Term>,
+    /// Whether to exclude the intercept (set to true when `-1` is present)
+    pub exclude_intercept: bool,
 }
 
 /// A term in a formula expression.
@@ -1229,6 +1235,7 @@ enum TokKind {
     Number(f64),
     Tilde,
     Plus,
+    Minus,
     Colon,
     Comma,
     LParen,
@@ -1280,6 +1287,13 @@ impl<'a> Lexer<'a> {
                     self.bump();
                     out.push(Token {
                         kind: TokKind::Plus,
+                        pos: i,
+                    });
+                }
+                '-' => {
+                    self.bump();
+                    out.push(Token {
+                        kind: TokKind::Minus,
                         pos: i,
                     });
                 }
@@ -1418,38 +1432,53 @@ impl Parser {
     }
 
     fn parse_formula(&mut self) -> Result<Ast, Error> {
-        let lhs_terms = self.parse_sum_terms()?;
+        let (lhs_terms, _) = self.parse_sum_terms()?;
         if let Some(t) = self.peek() {
             if matches!(t.kind, TokKind::Tilde) {
                 self.bump();
                 // Handle empty RHS after tilde
-                let rhs_terms = if self.peek().is_some() {
+                let (rhs_terms, exclude_intercept) = if self.peek().is_some() {
                     self.parse_sum_terms()?
                 } else {
-                    Vec::new()
+                    (Vec::new(), false)
                 };
                 return Ok(Ast {
                     lhs: lhs_terms,
                     rhs: rhs_terms,
+                    exclude_intercept,
                 });
             }
         }
         // No '~' -> rhs-only formula; lhs empty
+        let (rhs_terms, exclude_intercept) = self.parse_sum_terms()?;
         Ok(Ast {
             lhs: Vec::new(),
-            rhs: lhs_terms,
+            rhs: rhs_terms,
+            exclude_intercept,
         })
     }
 
-    // sum := prod ( "+" prod )*
-    fn parse_sum_terms(&mut self) -> Result<Vec<Term>, Error> {
+    // sum := prod ( ("+" | "-") prod )*
+    fn parse_sum_terms(&mut self) -> Result<(Vec<Term>, bool), Error> {
         let mut terms = Vec::new();
+        let mut exclude_intercept = false;
         let mut first = true;
         loop {
             if !first {
                 match self.peek() {
                     Some(t) if matches!(t.kind, TokKind::Plus) => {
                         self.bump();
+                    }
+                    Some(t) if matches!(t.kind, TokKind::Minus) => {
+                        self.bump();
+                        // Check if the next token is a number 1 (for -1 intercept removal)
+                        if let Some(next_t) = self.peek() {
+                            if matches!(next_t.kind, TokKind::Number(1.0)) {
+                                self.bump(); // consume the 1
+                                exclude_intercept = true;
+                                break; // Stop parsing after -1
+                            }
+                        }
                     }
                     _ => break,
                 }
@@ -1458,7 +1487,7 @@ impl Parser {
             let term = self.parse_prod()?;
             terms.push(term);
         }
-        Ok(terms)
+        Ok((terms, exclude_intercept))
     }
 
     // prod := atom ( ":" atom )*
@@ -1506,7 +1535,7 @@ impl Parser {
                 }
             }
             TokKind::LParen => {
-                let inner = self.parse_sum_terms()?;
+                let (inner, _) = self.parse_sum_terms()?;
                 self.expect(&TokKind::RParen)?;
                 Ok(Term::Group(Box::new(inner)))
             }
