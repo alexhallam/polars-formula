@@ -1,6 +1,6 @@
 //! # polars-formula
 //!
-//! A high-performance formula parsing and materialization library for Rust that brings
+//! A parsing and materialization library for Rust that brings
 //! R-style and Python Patsy/Formulaic formula syntax to the Polars DataFrame ecosystem.
 //!
 //! ## Overview
@@ -9,26 +9,28 @@
 //! and materializing them into design matrices. It seamlessly integrates with Polars
 //! DataFrames and provides efficient conversion to faer matrices for linear algebra operations.
 //!
-//! ## ⚠️ Important Note
-//!
-//! **The simple parser in this module is deprecated.** For new code, use the comprehensive
-//! DSL parser in the `dsl` module:
-//!
-//! ```rust
-//! use polars_formula::dsl::{parser::parser, materialize::materialize_dsl_spec};
-//! use chumsky::Parser;
-//!
-//! let p = parser();
-//! let spec = p.parse("y ~ x1 + x2")?;
-//! let (y, X, Z) = materialize_dsl_spec(&df, &spec, MaterializeOptions::default())?;
-//! ```
-//!
 //! The DSL parser supports:
-//! - Complex formulas with interactions, polynomials, and random effects
-//! - Family and link specifications
-//! - Distributional parameters
-//! - Autocorrelation terms
-//! - Proper canonicalization
+//! | Syntax | Description |
+//! |--------|-------------|
+//! | `y ~ x1 + x2` | Linear regression |
+//! | `y ~ x1 * x2` | Product terms (expands to x1 + x2 + x1:x2) |
+//! | `y ~ x1:x2` | Interaction terms |
+//! | `y ~ poly(x1, 2)` | Polynomial terms (x, x², x³, ...) |
+//! | `y ~ (1|group)` | Random intercepts |
+//! | `y ~ (x|group)` | Random slopes |
+//! | `y ~ (x||group)` | Uncorrelated random effects |
+//! | `y ~ I(x)` | Identity function (literal interpretation) |
+//! | `y ~ x^2` | Power terms |
+//! | `y ~ (a+b)^3` | Polynomial expansion |
+//! | `y ~ a/b` | Nesting (a + a:b) |
+//! | `y ~ b %in% a` | Nesting (b within a) |
+//! | `y | weights(w) ~ x` | Auxiliary terms (weights, se, trials, etc.) |
+//! | `Surv(time, event) ~ x` | Survival analysis |
+//! | `cbind(success, failure) ~ x` | Multivariate responses |
+//! | `s(x, k=10, bs="tp")` | Smooth terms (s, t2, te, ti) |
+//! | `family=gaussian() y ~ x` | Distribution families |
+//! | `y ~ x + sigma ~ z` | Distributional parameters |
+//! | `y ~ x + ar(p=1)` | Autocorrelation terms |
 //!
 //! ## Features
 //!
