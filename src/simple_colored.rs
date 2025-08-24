@@ -65,6 +65,15 @@ impl SimpleColoredPretty {
         }
     }
 
+    /// Color the original formula string without parsing or canonicalizing
+    pub fn formula_original(&self, formula: &str) -> String {
+        if !self.enabled {
+            return formula.to_string();
+        }
+
+        self.formula_simple_parse(formula)
+    }
+
     /// Color a formula using the parsed AST structure (most accurate)
     pub fn pretty_model_spec(&self, spec: &ModelSpec) -> String {
         if !self.enabled {

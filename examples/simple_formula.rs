@@ -10,9 +10,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let formula_str = "mpg ~ wt + hp + cyl + wt:hp + poly(disp, 2) - 1";
     println!("Original: {}", formula_str);
 
-    // Colored version
+    // Colored version (original syntax preserved)
     let color_pretty = SimpleColoredPretty::default();
-    println!("Colored:  {}", color_pretty.formula(formula_str));
+    println!("Colored:  {}", color_pretty.formula_original(formula_str));
+
+    // Canonicalized version (for comparison)
+    println!("Canonicalized: {}", color_pretty.formula(formula_str));
 
     // Materialize the formula
     let formula = Formula::parse(formula_str)?;
