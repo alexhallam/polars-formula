@@ -26,10 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Define the formula to parse
     let formula_str = "angle ~ recipe * temperature + (1 | recipe:replicate)";
     let color_pretty = SimpleColoredPretty::default();
-    println!(
-        "2. Parsing formula: {}",
-        color_pretty.formula(formula_str)
-    );
+    println!("2. Parsing formula: {}", color_pretty.formula(formula_str));
 
     // Parse the formula using the new DSL parser
     let p = parser();
@@ -124,7 +121,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("   'angle ~ recipe': {:?}", basic_result.is_ok());
 
             // Try with interaction
-            let interaction_result = p.parse("angle ~ recipe * temperature".chars().collect::<Vec<_>>());
+            let interaction_result =
+                p.parse("angle ~ recipe * temperature".chars().collect::<Vec<_>>());
             println!(
                 "   'angle ~ recipe * temperature': {:?}",
                 interaction_result.is_ok()
