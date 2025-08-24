@@ -1,6 +1,11 @@
 use crate::dsl::ast::*;
 use chumsky::Parser;
-use owo_colors::OwoColorize;
+
+// Color constants (hex codes)
+// These hex colors are now being used with ANSI escape codes for terminal output.
+const RESPONSE_COLOR: u32 = 0xd08770; // Orange-red
+const PREDICTOR_COLOR: u32 = 0xb48ead; // Purple
+const OPERATOR_COLOR: u32 = 0xebcb8b; // Yellow
 
 /// Simple colored pretty-printer for formulas
 pub struct SimpleColoredPretty {
@@ -20,6 +25,28 @@ impl SimpleColoredPretty {
 
     pub fn disabled() -> Self {
         Self { enabled: false }
+    }
+
+    /// Convert hex color to ANSI escape code
+    fn hex_to_ansi(&self, hex_color: u32) -> String {
+        if !self.enabled {
+            return String::new();
+        }
+
+        let r = ((hex_color >> 16) & 0xFF) as u8;
+        let g = ((hex_color >> 8) & 0xFF) as u8;
+        let b = (hex_color & 0xFF) as u8;
+
+        format!("\x1b[38;2;{};{};{}m", r, g, b)
+    }
+
+    /// Reset ANSI color
+    fn reset_color(&self) -> String {
+        if self.enabled {
+            "\x1b[0m".to_string()
+        } else {
+            String::new()
+        }
     }
 
     /// Color a formula string using AST parsing for accuracy
@@ -176,13 +203,13 @@ impl SimpleColoredPretty {
                 || token == "-"
                 || token == "^"
             {
-                result.push_str(&token.yellow().to_string());
+                result.push_str(&self.operator(&token));
             } else if token == "(" || token == ")" {
-                result.push_str(&token.blue().to_string());
+                result.push_str(&self.predictor(&token));
             } else if is_response {
-                result.push_str(&token.red().to_string());
+                result.push_str(&self.response(&token));
             } else {
-                result.push_str(&token.blue().to_string());
+                result.push_str(&self.predictor(&token));
             }
         }
 
@@ -192,7 +219,12 @@ impl SimpleColoredPretty {
     /// Color a response variable
     pub fn response(&self, s: &str) -> String {
         if self.enabled {
-            s.red().to_string()
+            format!(
+                "{}{}{}",
+                self.hex_to_ansi(RESPONSE_COLOR),
+                s,
+                self.reset_color()
+            )
         } else {
             s.to_string()
         }
@@ -201,7 +233,12 @@ impl SimpleColoredPretty {
     /// Color a predictor variable
     pub fn predictor(&self, s: &str) -> String {
         if self.enabled {
-            s.blue().to_string()
+            format!(
+                "{}{}{}",
+                self.hex_to_ansi(PREDICTOR_COLOR),
+                s,
+                self.reset_color()
+            )
         } else {
             s.to_string()
         }
@@ -210,7 +247,12 @@ impl SimpleColoredPretty {
     /// Color an operator
     pub fn operator(&self, s: &str) -> String {
         if self.enabled {
-            s.yellow().to_string()
+            format!(
+                "{}{}{}",
+                self.hex_to_ansi(OPERATOR_COLOR),
+                s,
+                self.reset_color()
+            )
         } else {
             s.to_string()
         }
