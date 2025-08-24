@@ -3,8 +3,9 @@ use owo_colors::{colors::CustomColor, OwoColorize};
 // Define custom colors using const generics
 // type ResponseColor = CustomColor<191, 97, 106>;
 type ResponseColor = CustomColor<163, 190, 140>;
-type TermColor = CustomColor<208, 135, 112>;
-type OperatorColor = CustomColor<235, 203, 139>;
+//type TermColor = CustomColor<208, 135, 112>;
+type OperatorColor = CustomColor<208, 135, 112>;
+type TermColor = CustomColor<235, 203, 139>;
 /// Configuration for colored output
 #[derive(Debug, Clone)]
 pub struct ColorConfig {
