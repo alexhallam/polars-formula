@@ -462,7 +462,7 @@ impl Formula {
         &self,
         df: &DataFrame,
         opts: MaterializeOptions,
-    ) -> Result<(Series, DataFrame), Error> {
+    ) -> Result<(DataFrame, DataFrame), Error> {
         materialize_dataframe(df, &self.ast, opts)
     }
 }
@@ -1086,7 +1086,7 @@ pub fn materialize_dataframe(
     df: &DataFrame,
     ast: &Ast,
     opts: MaterializeOptions,
-) -> Result<(Series, DataFrame), Error> {
+) -> Result<(DataFrame, DataFrame), Error> {
     let (lhs_terms, rhs_terms) = (&ast.lhs, &ast.rhs);
 
     // --- LHS: expect exactly one term that yields exactly one column
@@ -1095,7 +1095,8 @@ pub fn materialize_dataframe(
         [(name, s)] => {
             // cast to f64 for downstream LA
             let s = cast_to_f64_named(name, s)?;
-            s
+            // Convert Series to DataFrame
+            s.into_frame()
         }
         [] => return Err(Error::Semantic("lhs is empty; expected a target".into())),
         _ => return Err(Error::Semantic("lhs must materialize to one column".into())),
@@ -1432,12 +1433,12 @@ impl Parser {
     }
 
     fn parse_formula(&mut self) -> Result<Ast, Error> {
-        let (lhs_terms, _) = self.parse_sum_terms()?;
+        let (lhs_terms, exclude_intercept) = self.parse_sum_terms()?;
         if let Some(t) = self.peek() {
             if matches!(t.kind, TokKind::Tilde) {
                 self.bump();
                 // Handle empty RHS after tilde
-                let (rhs_terms, exclude_intercept) = if self.peek().is_some() {
+                let (rhs_terms, rhs_exclude_intercept) = if self.peek().is_some() {
                     self.parse_sum_terms()?
                 } else {
                     (Vec::new(), false)
@@ -1445,15 +1446,14 @@ impl Parser {
                 return Ok(Ast {
                     lhs: lhs_terms,
                     rhs: rhs_terms,
-                    exclude_intercept,
+                    exclude_intercept: exclude_intercept || rhs_exclude_intercept,
                 });
             }
         }
         // No '~' -> rhs-only formula; lhs empty
-        let (rhs_terms, exclude_intercept) = self.parse_sum_terms()?;
         Ok(Ast {
             lhs: Vec::new(),
-            rhs: rhs_terms,
+            rhs: lhs_terms,
             exclude_intercept,
         })
     }
@@ -1739,6 +1739,7 @@ fn cast_to_f64_named(name: &str, s: &Series) -> Result<Series, Error> {
     Ok(s)
 }
 
+#[allow(dead_code)]
 fn cast_to_f64(s: &Series) -> Result<Float64Chunked, Error> {
     let s = s
         .cast(&DataType::Float64)
@@ -1940,13 +1941,14 @@ mod tests {
         let f = Formula::parse(formula_str).expect("Failed to parse formula");
 
         // Materialize the formula
-        let (y, x) = f
+        let (_y, x) = f
             .materialize(&df, MaterializeOptions::default())
             .expect("Failed to materialize formula");
 
         // Test LHS (y)
-        assert_eq!(y.name(), "y");
-        assert_eq!(y.len(), 3);
+        assert_eq!(_y.width(), 1);
+        assert_eq!(_y.height(), 3);
+        assert_eq!(_y.get_columns()[0].name(), "y");
 
         // Test RHS (X matrix)
         // Should have: Intercept, x1, poly(x2,2)^1, poly(x2,2)^2, x1:x2
@@ -1988,7 +1990,7 @@ mod tests {
 
     #[test]
     fn test_formula_without_intercept() {
-        let mut df: DataFrame = df!(
+        let df: DataFrame = df!(
             "y" => [1.0, 2.0, 3.0],
             "x1" => [1.0, 2.0, 3.0],
             "x2" => [1.0, 2.0, 3.0]
@@ -2004,7 +2006,7 @@ mod tests {
             clean_names: false,
         };
 
-        let (y, x) = f
+        let (_y, x) = f
             .materialize(&df, opts)
             .expect("Failed to materialize formula");
 
@@ -2028,13 +2030,16 @@ mod tests {
         let formula_str = "y ~ x1 + poly(x2, 2) + x1:x2";
         let f = Formula::parse(formula_str).expect("Failed to parse formula");
 
-        let (y, x) = f
+        let (_y, x) = f
             .materialize(&df, MaterializeOptions::default())
             .expect("Failed to materialize formula");
 
         // Convert to faer matrices
         let x_matrix = polars_to_faer(&x).expect("Failed to convert X to faer matrix");
-        let y_vector = series_to_faer_col(&y).expect("Failed to convert y to faer column");
+        let y_series = _y.get_columns()[0]
+            .as_series()
+            .expect("Failed to get y series");
+        let y_vector = series_to_faer_col(&y_series).expect("Failed to convert y to faer column");
 
         // Test matrix dimensions
         assert_eq!(x_matrix.nrows(), 3); // 3 rows
@@ -2109,10 +2114,10 @@ mod tests {
             clean_names: true,
             ..Default::default()
         };
-        let (y, X) = formula.materialize(&df, opts)?;
+        let (_y, x) = formula.materialize(&df, opts)?;
 
         // Check that names are cleaned
-        let column_names: Vec<&str> = X.get_column_names().iter().map(|s| s.as_str()).collect();
+        let column_names: Vec<&str> = x.get_column_names().iter().map(|s| s.as_str()).collect();
         assert!(column_names.contains(&"intercept"));
         assert!(column_names.contains(&"poly_x_2_1"));
         assert!(column_names.contains(&"poly_x_2_2"));

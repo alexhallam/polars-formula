@@ -67,9 +67,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok((y, x, z)) => {
                     println!("   ✅ Materialization successful!");
                     println!("   Response variable (y):");
-                    println!("     - Name: {}", y.name());
-                    println!("     - Length: {}", y.len());
-                    println!("     - Type: {:?}", y.dtype());
+                    println!("     - Shape: {} rows × {} columns", y.height(), y.width());
+                    println!("     - Column names: {:?}", y.get_column_names());
+                    println!("     - Types: {:?}", y.dtypes());
                     println!("     - First 5 values: {:?}", y.head(Some(5)));
                     println!();
 

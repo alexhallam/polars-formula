@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let formula1 = Formula::parse("y ~ x1 + x2")?;
     let (y1, X1) = formula1.materialize(&df, MaterializeOptions::default())?;
 
-    println!("Response variable: {}", y1.name());
+    println!("Response variable shape: {} rows × {} columns", y1.height(), y1.width());
     println!("Design matrix columns:");
     for (i, name) in X1.get_column_names().iter().enumerate() {
         println!("  {}: {}", i, name);
@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let formula2 = Formula::parse("y ~ x1 + x2 - 1")?;
     let (y2, X2) = formula2.materialize(&df, MaterializeOptions::default())?;
 
-    println!("Response variable: {}", y2.name());
+    println!("Response variable shape: {} rows × {} columns", y2.height(), y2.width());
     println!("Design matrix columns:");
     for (i, name) in X2.get_column_names().iter().enumerate() {
         println!("  {}: {}", i, name);
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let (y3, X3) = formula1.materialize(&df, opts_no_intercept)?;
 
-    println!("Response variable: {}", y3.name());
+    println!("Response variable shape: {} rows × {} columns", y3.height(), y3.width());
     println!("Design matrix columns:");
     for (i, name) in X3.get_column_names().iter().enumerate() {
         println!("  {}: {}", i, name);
@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let formula4 = Formula::parse("y ~ x1 + x2 + x1:x2 + poly(x1, 2) - 1")?;
     let (y4, X4) = formula4.materialize(&df, MaterializeOptions::default())?;
 
-    println!("Response variable: {}", y4.name());
+    println!("Response variable shape: {} rows × {} columns", y4.height(), y4.width());
     println!("Design matrix columns:");
     for (i, name) in X4.get_column_names().iter().enumerate() {
         println!("  {}: {}", i, name);

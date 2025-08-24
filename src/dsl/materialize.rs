@@ -15,8 +15,8 @@ use polars::prelude::*;
 ///
 /// # Returns
 ///
-/// Returns `(Series, DataFrame, DataFrame)` where:
-/// - `Series`: The response variable (left side of `~`)
+/// Returns `(DataFrame, DataFrame, DataFrame)` where:
+/// - `DataFrame`: The response variable(s) (left side of `~`)
 /// - `DataFrame`: The fixed effects design matrix (X)
 /// - `DataFrame`: The random effects design matrix (Z)
 ///
@@ -48,7 +48,7 @@ pub fn materialize_dsl_spec(
     df: &DataFrame,
     spec: &ModelSpec,
     opts: MaterializeOptions,
-) -> Result<(Series, DataFrame, DataFrame), Error> {
+) -> Result<(DataFrame, DataFrame, DataFrame), Error> {
     // Materialize the main formula
     let (y, x, z) = materialize_formula(df, &spec.formula, opts)?;
 
@@ -64,7 +64,7 @@ fn materialize_formula(
     df: &DataFrame,
     formula: &Formula,
     opts: MaterializeOptions,
-) -> Result<(Series, DataFrame, DataFrame), Error> {
+) -> Result<(DataFrame, DataFrame, DataFrame), Error> {
     // Materialize LHS (response)
     let y = materialize_response(df, &formula.lhs)?;
 
@@ -77,16 +77,20 @@ fn materialize_formula(
 }
 
 /// Materialize a response expression.
-fn materialize_response(df: &DataFrame, response: &Response) -> Result<Series, Error> {
+fn materialize_response(df: &DataFrame, response: &Response) -> Result<DataFrame, Error> {
     match response {
-        Response::Var(name) => df
-            .column(name)
-            .map_err(|_| Error::Semantic(format!("Column '{}' not found in DataFrame", name)))
-            .and_then(|s| {
-                s.as_series()
-                    .ok_or_else(|| Error::Semantic("Failed to convert column to series".into()))
-            })
-            .map(|s| s.clone()),
+        Response::Var(name) => {
+            let series = df
+                .column(name)
+                .map_err(|_| Error::Semantic(format!("Column '{}' not found in DataFrame", name)))
+                .and_then(|s| {
+                    s.as_series()
+                        .ok_or_else(|| Error::Semantic("Failed to convert column to series".into()))
+                })?;
+
+            // Convert Series to DataFrame
+            Ok(series.clone().into_frame())
+        }
         Response::BinomialTrials {
             successes,
             trials: _,
@@ -94,7 +98,8 @@ fn materialize_response(df: &DataFrame, response: &Response) -> Result<Series, E
             // For binomial trials, we return the successes series
             // The trials series is available for validation and downstream processing
             if let Expr::Var(successes_name) = successes {
-                df.column(successes_name)
+                let series = df
+                    .column(successes_name)
                     .map_err(|_| {
                         Error::Semantic(format!(
                             "Column '{}' not found in DataFrame",
@@ -105,8 +110,10 @@ fn materialize_response(df: &DataFrame, response: &Response) -> Result<Series, E
                         s.as_series().ok_or_else(|| {
                             Error::Semantic("Failed to convert column to series".into())
                         })
-                    })
-                    .map(|s| s.clone())
+                    })?;
+
+                // Convert Series to DataFrame
+                Ok(series.clone().into_frame())
             } else {
                 Err(Error::Semantic(
                     "Binomial successes must be a variable name".into(),
@@ -117,7 +124,8 @@ fn materialize_response(df: &DataFrame, response: &Response) -> Result<Series, E
             // For now, just take the first variable
             // TODO: Implement proper multi-response handling
             if let Some(name) = names.first() {
-                df.column(name)
+                let series = df
+                    .column(name)
                     .map_err(|_| {
                         Error::Semantic(format!("Column '{}' not found in DataFrame", name))
                     })
@@ -125,8 +133,10 @@ fn materialize_response(df: &DataFrame, response: &Response) -> Result<Series, E
                         s.as_series().ok_or_else(|| {
                             Error::Semantic("Failed to convert column to series".into())
                         })
-                    })
-                    .map(|s| s.clone())
+                    })?;
+
+                // Convert Series to DataFrame
+                Ok(series.clone().into_frame())
             } else {
                 Err(Error::Semantic("Empty multi-response specification".into()))
             }
@@ -138,13 +148,17 @@ fn materialize_response(df: &DataFrame, response: &Response) -> Result<Series, E
         } => {
             // For survival analysis, we'll use the time variable as response for now
             // TODO: Implement proper survival response handling
-            materialize_expr(df, time)
+            let series = materialize_expr(df, time)?;
+            // Convert Series to DataFrame
+            Ok(series.clone().into_frame())
         }
         Response::Func { name: _name, args } => {
             // For now, treat function responses as the first argument
             // TODO: Implement proper function response handling
             if let Some(first_arg) = args.first() {
-                materialize_expr(df, first_arg)
+                let series = materialize_expr(df, first_arg)?;
+                // Convert Series to DataFrame
+                Ok(series.clone().into_frame())
             } else {
                 Err(Error::Semantic(
                     "Function response with no arguments".into(),
@@ -186,6 +200,7 @@ fn materialize_rhs_with_random(
 }
 
 /// Materialize the RHS expression into a design matrix (for backward compatibility).
+#[allow(dead_code)]
 fn materialize_rhs(
     df: &DataFrame,
     rhs: &Expr,
@@ -423,6 +438,7 @@ fn materialize_expr_to_columns_with_random(
 }
 
 /// Materialize an expression to multiple columns (for backward compatibility).
+#[allow(dead_code)]
 fn materialize_expr_to_columns(
     df: &DataFrame,
     expr: &Expr,
