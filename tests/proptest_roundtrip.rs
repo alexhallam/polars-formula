@@ -1,6 +1,6 @@
-use proptest::prelude::*;
-use polars_formula::dsl::{parser::parser, ast::*, pretty::pretty};
 use chumsky::Parser;
+use polars_formula::dsl::{parser::parser, pretty::pretty};
+use proptest::prelude::*;
 
 fn ident_strat() -> impl Strategy<Value = String> {
     // Avoid reserved words minimally (real impl: filter a set)
@@ -9,16 +9,15 @@ fn ident_strat() -> impl Strategy<Value = String> {
 
 // Tiny generator for expressions (grow over time)
 fn expr_strat() -> impl Strategy<Value = String> {
-    let var = ident_strat();
     let atom = prop_oneof![
-        var.clone(),
+        ident_strat(),
         "[0-9]{1,3}(\\.[0-9]{1,2})?".prop_map(|s| s),
         Just("1".to_string()),
         Just("0".to_string()),
-        (var.clone(), var.clone()).prop_map(|(a,b)| format!("{a}:{b}")),
-        (var.clone(), var.clone()).prop_map(|(a,b)| format!("{a}*{b}")),
-        (var.clone(), 1u8..=3).prop_map(|(a,k)| format!("poly({a},{k})")),
-        (var.clone(), var.clone()).prop_map(|(a,b)| format!("({a}+{b})^2")),
+        (ident_strat(), ident_strat()).prop_map(|(a, b)| format!("{a}:{b}")),
+        (ident_strat(), ident_strat()).prop_map(|(a, b)| format!("{a}*{b}")),
+        (ident_strat(), 1u8..=3).prop_map(|(a, k)| format!("poly({a},{k})")),
+        (ident_strat(), ident_strat()).prop_map(|(a, b)| format!("({a}+{b})^2")),
     ];
     atom
 }

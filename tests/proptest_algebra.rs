@@ -1,4 +1,4 @@
-use polars_formula::dsl::{parser::parser, ast::*, canon::{expand_star, canonicalize}};
+use polars_formula::dsl::{parser::parser, canon::canonicalize};
 use chumsky::Parser;
 
 #[test]

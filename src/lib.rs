@@ -9,168 +9,33 @@
 //! and materializing them into design matrices. It seamlessly integrates with Polars
 //! DataFrames and provides efficient conversion to faer matrices for linear algebra operations.
 //!
+//! ## ⚠️ Important Note
+//!
+//! **The simple parser in this module is deprecated.** For new code, use the comprehensive
+//! DSL parser in the `dsl` module:
+//!
+//! ```rust
+//! use polars_formula::dsl::{parser::parser, materialize::materialize_dsl_spec};
+//! use chumsky::Parser;
+//!
+//! let p = parser();
+//! let spec = p.parse("y ~ x1 + x2")?;
+//! let (y, X, Z) = materialize_dsl_spec(&df, &spec, MaterializeOptions::default())?;
+//! ```
+//!
+//! The DSL parser supports:
+//! - Complex formulas with interactions, polynomials, and random effects
+//! - Family and link specifications
+//! - Distributional parameters
+//! - Autocorrelation terms
+//! - Proper canonicalization
+//!
 //! ## Features
 //!
 //! - **Formula Parsing**: Parse R-style formulas like `y ~ x1 + x2 + x1:x2`
 //! - **Polynomial Terms**: Support for polynomial expansions with `poly(x, degree)`
 //! - **Interactions**: Automatic handling of interaction terms using `:`
 //! - **Intercept Control**: Flexible intercept inclusion/exclusion
-//! ## Quick Start
-//!
-//! ```rust
-//! use polars::prelude::*;
-//! use polars_formula::{Formula, MaterializeOptions};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! // Create sample data
-//! let df = df!(
-//!     "y" => [1.0, 2.0, 3.0, 4.0, 5.0],
-//!     "x1" => [1.0, 2.0, 3.0, 4.0, 5.0],
-//!     "x2" => [2.0, 3.0, 4.0, 5.0, 6.0]
-//! )?;
-//!
-//! // Parse a formula
-//! let formula = Formula::parse("y ~ x1 + x2")?;
-//!
-//! // Materialize the formula into design matrices
-//! let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
-//!
-//! println!("Response variable: {:?}", y);
-//! println!("Design matrix: {:?}", X);
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ## Supported Formula Syntax
-//!
-//! ### Basic Operations
-//!
-//! - **Variables**: `x`, `income`, `age`
-//! - **Addition**: `x1 + x2` (include both terms)
-//! - **Interactions**: `x1:x2` (product of x1 and x2)
-//! - **Intercept**: Automatically included (use options to control)
-//!
-//! ### Functions
-//!
-//! - **Polynomials**: `poly(x, 3)` expands to x, x², x³
-//! - **Constants**: Numeric literals like `1`, `0` for intercept control
-//!
-//! ### Grouping
-//!
-//! - **Parentheses**: `(x1 + x2):z` for grouped interactions
-//!
-//! ## Examples
-//!
-//! ### Linear Regression
-//!
-//! ```rust
-//! use polars::prelude::*;
-//! use polars_formula::{Formula, MaterializeOptions};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let df = df!(
-//!     "price" => [100.0, 150.0, 200.0, 250.0],
-//!     "size" => [1000.0, 1500.0, 2000.0, 2500.0],
-//!     "age" => [5.0, 10.0, 15.0, 20.0]
-//! )?;
-//!
-//! let formula = Formula::parse("price ~ size + age")?;
-//! let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
-//!
-//! // X now contains: [Intercept, size, age]
-//! println!("Design matrix shape: {}x{}", X.height(), X.width());
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Polynomial Regression
-//!
-//! ```rust
-//! use polars::prelude::*;
-//! use polars_formula::{Formula, MaterializeOptions};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let df = df!(
-//!     "y" => [1.0, 4.0, 9.0, 16.0, 25.0],
-//!     "x" => [1.0, 2.0, 3.0, 4.0, 5.0]
-//! )?;
-//!
-//! // Fit a cubic polynomial
-//! let formula = Formula::parse("y ~ poly(x, 3)")?;
-//! let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
-//!
-//! // X contains: [Intercept, x, x², x³]
-//! println!("Polynomial features: {:?}", X.get_column_names());
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Interaction Terms
-//!
-//! ```rust
-//! use polars::prelude::*;
-//! use polars_formula::{Formula, MaterializeOptions};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let df = df!(
-//!     "outcome" => [10.0, 20.0, 30.0, 40.0],
-//!     "treatment" => [1.0, 0.0, 1.0, 0.0],
-//!     "dose" => [5.0, 5.0, 10.0, 10.0]
-//! )?;
-//!
-//! // Model with interaction
-//! let formula = Formula::parse("outcome ~ treatment + dose + treatment:dose")?;
-//! let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
-//!
-//! // X contains: [Intercept, treatment, dose, treatment:dose]
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Converting to Linear Algebra Matrices
-//!
-//! Note: the following example requires the `faer` feature.
-//!
-//! ```rust
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # #[cfg(feature = "faer")]
-//! # {
-//! # use polars::prelude::*;
-//! # use polars_formula::{Formula, MaterializeOptions, polars_to_faer, series_to_faer_col};
-//!
-//! let df = df!(
-//!     "y" => [1.0, 2.0, 3.0, 4.0],
-//!     "x1" => [1.0, 2.0, 3.0, 4.0],
-//!     "x2" => [2.0, 4.0, 6.0, 8.0]
-//! )?;
-//!
-//! let formula = Formula::parse("y ~ x1 + x2")?;
-//! let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
-//!
-//! // Convert to faer matrices for linear algebra
-//! let X_matrix = polars_to_faer(&X)?;
-//! let y_vector = series_to_faer_col(&y)?;
-//!
-//! println!("Matrix dimensions: {}x{}", X_matrix.nrows(), X_matrix.ncols());
-//! println!("Vector length: {}", y_vector.nrows());
-//!
-//! // Now you can perform linear algebra operations
-//! // let coefficients = (X_matrix.transpose() * &X_matrix).inverse()? * X_matrix.transpose() * &y_vector;
-//! # }
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ## Planned Features
-//!
-//! Future versions will include:
-//! - **Categorical Variables**: `C(category)` for factor encoding
-//! - **Term Removal**: `-x` to remove terms from expansions
-//! - **Nested Effects**: `x/y` for nested structures
-//! - **Dot Expansion**: `.` to include all available variables
-//! - **Spline Functions**: Smooth function approximations
-//! - **Lag Operations**: Time series support
-//! - **Custom Functions**: User-defined transformations
 
 #![forbid(unsafe_code)]
 

@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Read data from CSV file
     println!("📊 Loading data from mtcars.csv...");
 
-    let df = CsvReader::new(std::fs::File::open("examples/mtcars.csv")?).finish()?;
+    let df = CsvReader::new(std::fs::File::open("examples/data/mtcars.csv")?).finish()?;
 
     println!("{}", df);
 
@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let formula = Formula::parse(formula_text)?;
     let (y, x) = formula.materialize(&df, MaterializeOptions::default())?;
 
-    println!("  Response variable: {}", y.name());
+    println!("  Response variable columns: {:?}", y.get_column_names());
     println!("  Design matrix columns:");
     for (i, name) in x.get_column_names().iter().enumerate() {
         println!("    {}: {}", i, name.as_str());
@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let (y, x) = formula.materialize(&df, opts)?;
 
-    println!("  Response variable: {}", y.name());
+    println!("  Response variable columns: {:?}", y.get_column_names());
     println!("  Design matrix columns:");
     for (i, name) in x.get_column_names().iter().enumerate() {
         println!("    {}: {}", i, name.as_str());
@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let poly_formula = Formula::parse(poly_formula_text)?;
     let (y, x) = poly_formula.materialize(&df, MaterializeOptions::default())?;
 
-    println!("  Response variable: {}", y.name());
+    println!("  Response variable columns: {:?}", y.get_column_names());
     println!("  Design matrix columns:");
     for (i, name) in x.get_column_names().iter().enumerate() {
         println!("    {}: {}", i, name.as_str());
@@ -78,7 +78,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let complex_formula = Formula::parse(complex_formula_text)?;
     let (y, x) = complex_formula.materialize(&df, MaterializeOptions::default())?;
 
-    println!("  Response variable: {}", y.name());
+    println!("  Response variable columns: {:?}", y.get_column_names());
     println!("  Design matrix columns:");
     for (i, name) in x.get_column_names().iter().enumerate() {
         println!("    {}: {}", i, name.as_str());

@@ -1,4 +1,4 @@
-use polars_formula::dsl::{parser::parser, ast::*, pretty::pretty, canon::canonicalize};
+use polars_formula::dsl::{parser::parser, ast::*, pretty::pretty};
 use chumsky::Parser;
 
 #[test]
@@ -99,7 +99,7 @@ fn test_survival_parsing() {
     
     let spec = result.unwrap();
     match &spec.formula.lhs {
-        Response::Surv { time, event, time2 } => {
+        Response::Surv { time: _, event: _, time2 } => {
             assert!(time2.is_none());
         },
         _ => panic!("Expected Surv response"),
@@ -310,14 +310,14 @@ fn test_canonicalization_identities() {
     let p = parser();
     
     // x*y == x + y + x:y
-    let a = p.parse("y ~ x*y").unwrap();
-    let b = p.parse("y ~ x + y + x:y").unwrap();
+    let _a = p.parse("y ~ x*y").unwrap();
+    let _b = p.parse("y ~ x + y + x:y").unwrap();
     // Note: This will fail until canonicalization is implemented
     // assert_eq!(canonicalize(&a), canonicalize(&b));
     
     // (a/b) == a + a:b
-    let a = p.parse("y ~ a/b").unwrap();
-    let b = p.parse("y ~ a + a:b").unwrap();
+    let _a = p.parse("y ~ a/b").unwrap();
+    let _b = p.parse("y ~ a + a:b").unwrap();
     // Note: This will fail until canonicalization is implemented
     // assert_eq!(canonicalize(&a), canonicalize(&b));
 }

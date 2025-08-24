@@ -1,5 +1,5 @@
 use chumsky::Parser;
-use polars_formula::dsl::{ast::*, parser::parser, pretty::pretty};
+use polars_formula::dsl::{ast::*, parser::parser};
 
 #[test]
 fn test_basic_formula_parsing() {
