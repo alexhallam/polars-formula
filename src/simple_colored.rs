@@ -720,9 +720,9 @@ impl SimpleColoredPretty {
                             GroupOp::Nest => "/",
                             GroupOp::Split => "+",
                         };
-                        format!("{}{}", self.operator(op_str), name)
+                        format!("{}{}", self.operator(op_str), self.predictor(name))
                     } else {
-                        name.clone()
+                        self.predictor(name)
                     }
                 })
                 .collect::<Vec<_>>()
