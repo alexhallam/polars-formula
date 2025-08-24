@@ -1,7 +1,7 @@
 use chumsky::Parser;
 use polars::prelude::*;
 use polars_formula::dsl::{canon::*, materialize::materialize_dsl_spec, parser::parser, pretty::*};
-use polars_formula::MaterializeOptions;
+use polars_formula::{MaterializeOptions, SimpleColoredPretty};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== CBPP DSL Demo ===\n");
@@ -49,6 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("2. Testing parser capabilities with CBPP data:");
 
     let p = parser();
+    let color_pretty = SimpleColoredPretty::default();
 
     // Test basic formulas
     let basic_formulas = vec![
@@ -66,10 +67,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(spec) => {
                 let canonicalized = canonicalize(&spec);
                 let pretty_output = pretty(&canonicalized);
-                println!("   ✅ {} → {}", formula, pretty_output);
+                println!(
+                    "   ✅ {} → {}",
+                    color_pretty.formula_original(formula),
+                    color_pretty.formula(&pretty_output)
+                );
             }
             Err(_) => {
-                println!("   ❌ {} → failed to parse", formula);
+                println!(
+                    "   ❌ {} → failed to parse",
+                    color_pretty.formula_original(formula)
+                );
             }
         }
     }
@@ -95,21 +103,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(spec) => {
                 let canonicalized = canonicalize(&spec);
                 let pretty_output = pretty(&canonicalized);
-                println!("   ✅ {} → {}", formula, pretty_output);
+                println!(
+                    "   ✅ {} → {}",
+                    color_pretty.formula_original(formula),
+                    color_pretty.formula(&pretty_output)
+                );
                 if spec.family.is_some() {
                     println!("     Family: {:?}", spec.family);
                 }
             }
             Err(_) => {
-                println!("   ❌ {} → failed to parse", formula);
+                println!(
+                    "   ❌ {} → failed to parse",
+                    color_pretty.formula_original(formula)
+                );
             }
         }
     }
     println!();
 
     // Demonstrate materialization with a working formula
-    println!("4. Materializing a working formula: incidence ~ period + (1|herd)");
-    let working_formula = "incidence ~ period + (1|herd)";
+    println!(
+        "4. Materializing a working formula: {}",
+        color_pretty.formula_original("incidence ~ period + (1|herd)")
+    );
 
     // Also test binomial trials materialization
     println!(
@@ -130,9 +147,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok((y, x, z)) => {
                     println!("   ✅ Materialization successful!");
                     println!("   Response variable (y):");
-                    println!("     - Name: {}", y.name());
-                    println!("     - Length: {}", y.len());
-                    println!("     - Type: {:?}", y.dtype());
+                    println!("     - Shape: {} rows × {} columns", y.height(), y.width());
+                    println!("     - Column names: {:?}", y.get_column_names());
+                    println!("     - Types: {:?}", y.dtypes());
                     println!();
 
                     println!("   Fixed effects design matrix (X):");
@@ -161,7 +178,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Demonstrate materialization with a working formula
-    println!("6. Materializing a working formula: incidence ~ period + (1|herd)");
+    println!(
+        "6. Materializing a working formula: {}",
+        color_pretty.formula_original("incidence ~ period + (1|herd)")
+    );
     let working_formula = "incidence ~ period + (1|herd)";
     match p.parse(working_formula) {
         Ok(spec) => {
@@ -177,9 +197,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok((y, x, z)) => {
                     println!("   ✅ Materialization successful!");
                     println!("   Response variable (y):");
-                    println!("     - Name: {}", y.name());
-                    println!("     - Length: {}", y.len());
-                    println!("     - Type: {:?}", y.dtype());
+                    println!("     - Shape: {} rows × {} columns", y.height(), y.width());
+                    println!("     - Column names: {:?}", y.get_column_names());
+                    println!("     - Types: {:?}", y.dtypes());
                     println!();
 
                     println!("   Fixed effects design matrix (X):");
@@ -239,7 +259,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Implementation roadmap
     println!("8. Implementation Roadmap:");
-    println!("   ✅ Basic formula parsing: y ~ x");
+    println!(
+        "   ✅ Basic formula parsing: {}",
+        color_pretty.formula_original("y ~ x")
+    );
     println!("   ✅ Group terms: (1|group)");
     println!("   ✅ Interactions and products: x1:x2, x1*x2");
     println!("   ✅ Canonicalization: expanding products and groups");

@@ -1,7 +1,7 @@
 use chumsky::Parser;
 use polars::prelude::*;
 use polars_formula::dsl::{canon::*, materialize::materialize_dsl_spec, parser::parser, pretty::*};
-use polars_formula::MaterializeOptions;
+use polars_formula::{MaterializeOptions, SimpleColoredPretty};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Cake DSL Demo ===\n");
@@ -25,7 +25,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Define the formula to parse
     let formula_str = "angle ~ recipe * temperature + (1 | recipe:replicate)";
-    println!("2. Parsing formula: {}", formula_str);
+    let color_pretty = SimpleColoredPretty::default();
+    println!(
+        "2. Parsing formula: {}",
+        color_pretty.formula_original(formula_str)
+    );
 
     // Parse the formula using the new DSL parser
     let p = parser();
@@ -45,16 +49,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!();
 
             // Pretty print the parsed formula
-            println!("3. Pretty-printed formula:");
+            println!("3. Formula:");
             let pretty_output = pretty(&spec);
-            println!("   {}", pretty_output);
+            println!("   {}", color_pretty.formula(&pretty_output));
             println!();
 
             // Canonicalize the formula
-            println!("4. Canonicalizing formula...");
+            println!("4. Canonicalizing Formula:");
             let canonicalized = canonicalize(&spec);
             let canonical_pretty = pretty(&canonicalized);
-            println!("   Canonicalized: {}", canonical_pretty);
+            println!("   {}", color_pretty.formula(&canonical_pretty));
             println!();
 
             // Try to materialize the formula
