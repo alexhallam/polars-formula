@@ -52,7 +52,7 @@ pub mod dsl;
 // --- Public surface -------------------------------------------------------
 
 // Re-export colored pretty-printing
-pub use color::{ColorConfig, Color};
+pub use color::{Color, ColorConfig};
 
 /// A parsed statistical formula that can be materialized into design matrices.
 ///
