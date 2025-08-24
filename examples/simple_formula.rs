@@ -1,5 +1,5 @@
 use polars::prelude::*; // DataFrame andCsvReader
-use polars_formula::{Formula, MaterializeOptions};
+use polars_formula::{Formula, MaterializeOptions, SimpleColoredPretty};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Simple dataset
@@ -8,7 +8,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Original formula
     let formula_str = "mpg ~ wt + hp + cyl + wt:hp + poly(disp, 2) - 1";
-    println!("Original: {}", formula_str);
+    let color_pretty = SimpleColoredPretty::default();
+    println!("Original: {}", color_pretty.formula(formula_str));
 
     // Materialize the formula
     let formula = Formula::parse(formula_str)?;
