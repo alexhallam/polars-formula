@@ -69,6 +69,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+```
+
+The output of the example is:
+
 ```bash
 Original: mpg ~ wt + hp + cyl + wt:hp + poly(disp, 2) - 1
 y: shape: (32, 1)
