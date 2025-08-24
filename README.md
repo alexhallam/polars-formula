@@ -41,9 +41,73 @@ polars-formula = { version = "0.1", features = ["faer"] }
 ```bash
 git clone https://github.com/alexh/polars-formula.git
 cd polars-formula
-cargo run --example simple_formula_demo
+cargo run --example simple_formula
 ```
 
+The code in the `simple_formula.rs` example is a simple example of how to use the `polars-formula` library to parse a formula and materialize it into a `DataFrame`.
+
+```rust
+use polars::prelude::*; // DataFrame andCsvReader
+use polars_formula::{Formula, MaterializeOptions};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Simple dataset
+    let df: DataFrame =
+        CsvReader::new(std::fs::File::open("examples/data/mtcars.csv")?).finish()?;
+
+    // Original formula
+    let formula_str = "mpg ~ wt + hp + cyl + wt:hp + poly(disp, 2) - 1";
+    println!("Original: {}", formula_str);
+
+    // Materialize the formula
+    let formula = Formula::parse(formula_str)?;
+    let (y, x) = formula.materialize(&df, MaterializeOptions::default())?;
+
+    // Print the results
+    println!("y: {}", y);
+    println!("X: {}", x);
+
+    Ok(())
+}
+```
+Original: mpg ~ wt + hp + cyl + wt:hp + poly(disp, 2) - 1
+y: shape: (32, 1)
+┌──────┐
+│ mpg  │
+│ ---  │
+│ f64  │
+╞══════╡
+│ 21.0 │
+│ 21.0 │
+│ 22.8 │
+│ 21.4 │
+│ 18.7 │
+│ …    │
+│ 30.4 │
+│ 15.8 │
+│ 19.7 │
+│ 15.0 │
+│ 21.4 │
+└──────┘
+X: shape: (32, 6)
+┌───────┬───────┬─────┬─────────┬───────────────┬───────────────┐
+│ wt    ┆ hp    ┆ cyl ┆ wt_hp   ┆ poly_disp_2_1 ┆ poly_disp_2_2 │
+│ ---   ┆ ---   ┆ --- ┆ ---     ┆ ---           ┆ ---           │
+│ f64   ┆ f64   ┆ f64 ┆ f64     ┆ f64           ┆ f64           │
+╞═══════╪═══════╪═════╪═════════╪═══════════════╪═══════════════╡
+│ 2.62  ┆ 110.0 ┆ 6.0 ┆ 288.2   ┆ 160.0         ┆ 25600.0       │
+│ 2.875 ┆ 110.0 ┆ 6.0 ┆ 316.25  ┆ 160.0         ┆ 25600.0       │
+│ 2.32  ┆ 93.0  ┆ 4.0 ┆ 215.76  ┆ 108.0         ┆ 11664.0       │
+│ 3.215 ┆ 110.0 ┆ 6.0 ┆ 353.65  ┆ 258.0         ┆ 66564.0       │
+│ 3.44  ┆ 175.0 ┆ 8.0 ┆ 602.0   ┆ 360.0         ┆ 129600.0      │
+│ …     ┆ …     ┆ …   ┆ …       ┆ …             ┆ …             │
+│ 1.513 ┆ 113.0 ┆ 4.0 ┆ 170.969 ┆ 95.1          ┆ 9044.01       │
+│ 3.17  ┆ 264.0 ┆ 8.0 ┆ 836.88  ┆ 351.0         ┆ 123201.0      │
+│ 2.77  ┆ 175.0 ┆ 6.0 ┆ 484.75  ┆ 145.0         ┆ 21025.0       │
+│ 3.57  ┆ 335.0 ┆ 8.0 ┆ 1195.95 ┆ 301.0         ┆ 90601.0       │
+│ 2.78  ┆ 109.0 ┆ 4.0 ┆ 303.02  ┆ 121.0         ┆ 14641.0       │
+└───────┴───────┴─────┴─────────┴───────────────┴───────────────┘
+```
 
 ## Capability Tables (DSL ↔ call ↔ parse ↔ materialize)
 
