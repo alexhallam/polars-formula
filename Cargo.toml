@@ -1,6 +1,6 @@
 [package]
 name = "polars-formula"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 authors = ["Alex H <alexhallam6.28@gmail.com>"]
 license = "MIT"
