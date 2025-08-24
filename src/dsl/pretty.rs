@@ -124,7 +124,11 @@ fn pretty_response(response: &Response) -> String {
             format!("{}({})", name, args_str)
         }
         Response::BinomialTrials { successes, trials } => {
-            format!("{} | trials({})", pretty_expr(successes), pretty_expr(trials))
+            format!(
+                "{} | trials({})",
+                pretty_expr(successes),
+                pretty_expr(trials)
+            )
         }
     }
 }
