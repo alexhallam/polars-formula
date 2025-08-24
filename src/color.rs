@@ -37,11 +37,11 @@ impl ColorConfig {
 }
 
 /// Colored pretty-printer for formulas
-pub struct ColoredPretty {
+pub struct Color {
     config: ColorConfig,
 }
 
-impl ColoredPretty {
+impl Color {
     pub fn new(config: ColorConfig) -> Self {
         Self { config }
     }
@@ -193,7 +193,7 @@ impl ColoredPretty {
     }
 }
 
-impl Default for ColoredPretty {
+impl Default for Color {
     fn default() -> Self {
         Self::new(ColorConfig::default())
     }

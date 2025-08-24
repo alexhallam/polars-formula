@@ -1,10 +1,10 @@
-use polars_formula::SimpleColoredPretty;
+use polars_formula::Color;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🎨 Hex Color Constants Demo\n");
 
     // Create a colored pretty printer
-    let color_pretty = SimpleColoredPretty::default();
+    let color_pretty = Color::default();
 
     // Test formulas with the current colors
     let formulas = vec![

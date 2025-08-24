@@ -1,7 +1,7 @@
 use chumsky::Parser;
 use polars::prelude::*;
 use polars_formula::dsl::{canon::*, materialize::materialize_dsl_spec, parser::parser, pretty::*};
-use polars_formula::{MaterializeOptions, SimpleColoredPretty};
+use polars_formula::{MaterializeOptions, Color};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== CBPP DSL Demo ===\n");
@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("2. Testing parser capabilities with CBPP data:");
 
     let p = parser();
-    let color_pretty = SimpleColoredPretty::default();
+    let color_pretty = Color::default();
 
     // Test basic formulas
     let basic_formulas = vec![

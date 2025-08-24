@@ -1,5 +1,5 @@
 use polars::prelude::*; // DataFrame andCsvReader
-use polars_formula::{Formula, MaterializeOptions, SimpleColoredPretty};
+use polars_formula::{Formula, MaterializeOptions, Color};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Simple dataset
@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Original: {}", formula_str);
 
     // Colored version (original syntax preserved)
-    let color_pretty = SimpleColoredPretty::default();
+    let color_pretty = Color::default();
     println!("Colored:  {}", color_pretty.formula(formula_str));
 
     // Canonicalized version (for comparison)

@@ -48,13 +48,11 @@ use thiserror::Error;
 // DSL module for the new comprehensive formula parser
 pub mod color;
 pub mod dsl;
-pub mod simple_colored;
 
 // --- Public surface -------------------------------------------------------
 
 // Re-export colored pretty-printing
-pub use color::{ColorConfig, ColoredPretty};
-pub use simple_colored::SimpleColoredPretty;
+pub use color::{ColorConfig, Color};
 
 /// A parsed statistical formula that can be materialized into design matrices.
 ///

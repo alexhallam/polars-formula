@@ -1,7 +1,7 @@
 use chumsky::Parser;
 use polars::prelude::*;
 use polars_formula::dsl::{canon::*, materialize::materialize_dsl_spec, parser::parser, pretty::*};
-use polars_formula::{MaterializeOptions, SimpleColoredPretty};
+use polars_formula::{MaterializeOptions, Color};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Sleep Study DSL Demo ===\n");
@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Define the formula to parse
     let formula_str = "Reaction ~ Days + (Days | Subject)";
-    let color_pretty = SimpleColoredPretty::default();
+    let color_pretty = Color::default();
     println!(
         "2. Parsing formula: {}",
         color_pretty.formula(formula_str)

@@ -3,7 +3,7 @@ use polars::prelude::*;
 use polars_formula::dsl::{
     canon::canonicalize, materialize::materialize_dsl_spec, parser::parser, pretty::pretty,
 };
-use polars_formula::{MaterializeOptions, SimpleColoredPretty};
+use polars_formula::{MaterializeOptions, Color};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 polars-formula DSL Comprehensive Demo\n");
@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Create colored pretty printer
-    let color_pretty = SimpleColoredPretty::default();
+    let color_pretty = Color::default();
 
     // Test various formula types
     let formulas = vec![

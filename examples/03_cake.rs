@@ -1,7 +1,7 @@
 use chumsky::Parser;
 use polars::prelude::*;
 use polars_formula::dsl::{canon::*, materialize::materialize_dsl_spec, parser::parser, pretty::*};
-use polars_formula::{MaterializeOptions, SimpleColoredPretty};
+use polars_formula::{MaterializeOptions, Color};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Cake DSL Demo ===\n");
@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Define the formula to parse
     let formula_str = "angle ~ recipe * temperature + (1 | recipe:replicate)";
-    let color_pretty = SimpleColoredPretty::default();
+    let color_pretty = Color::default();
     println!("2. Parsing formula: {}", color_pretty.formula(formula_str));
 
     // Parse the formula using the new DSL parser
