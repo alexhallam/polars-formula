@@ -642,21 +642,21 @@ impl SimpleColoredPretty {
                 if let Some(id) = id {
                     format!(
                         "{}{}{}{}{}{}{}",
-                        self.group("("),
+                        self.operator("("),
                         inner_str,
                         self.operator("|"),
                         id,
                         self.operator("|"),
                         spec_str,
-                        self.group(")")
+                        self.operator(")")
                     )
                 } else {
                     format!(
                         "{}{}{}{}",
-                        self.group("("),
+                        self.operator("("),
                         inner_str,
                         self.operator(sep),
-                        format!("{}{}", spec_str, self.group(")")),
+                        format!("{}{}", spec_str, self.operator(")")),
                     )
                 }
             }
