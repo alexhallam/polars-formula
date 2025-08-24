@@ -46,12 +46,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let color_pretty = SimpleColoredPretty::default();
     println!(
         "2. Parsing formula: {}",
-        color_pretty.formula_original(formula_str)
+        color_pretty.formula(formula_str)
     );
 
     // Parse the formula using the new DSL parser
     let p = parser();
-    let parse_result = p.parse(formula_str);
+    let parse_result = p.parse(formula_str.chars().collect::<Vec<_>>());
 
     match parse_result {
         Ok(spec) => {
@@ -126,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Test roundtrip parsing
             println!("6. Testing roundtrip parsing...");
-            let reparsed = p.parse(pretty_output.as_str());
+            let reparsed = p.parse(pretty_output.as_str().chars().collect::<Vec<_>>());
             match reparsed {
                 Ok(_) => println!("   ✅ Roundtrip successful - parsed formula can be re-parsed!"),
                 Err(e) => println!("   ⚠️  Roundtrip failed: {:?}", e),
@@ -141,11 +141,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("   Debugging: Trying to parse simpler parts...");
 
             // Try just the basic formula
-            let basic_result = p.parse("Reaction ~ Days");
+            let basic_result = p.parse("Reaction ~ Days".chars().collect::<Vec<_>>());
             println!("   'Reaction ~ Days': {:?}", basic_result.is_ok());
 
             // Try with group
-            let group_result = p.parse("Reaction ~ (Days | Subject)");
+            let group_result = p.parse("Reaction ~ (Days | Subject)".chars().collect::<Vec<_>>());
             println!(
                 "   'Reaction ~ (Days | Subject)': {:?}",
                 group_result.is_ok()

@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "{}. Formula: {}",
             i + 1,
-            color_pretty.formula_original(formula_str)
+            color_pretty.formula(formula_str)
         );
     }
 

@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Colored version (original syntax preserved)
     let color_pretty = SimpleColoredPretty::default();
-    println!("Colored:  {}", color_pretty.formula_original(formula_str));
+    println!("Colored:  {}", color_pretty.formula(formula_str));
 
     // Canonicalized version (for comparison)
     println!("Canonicalized: {}", color_pretty.formula(formula_str));

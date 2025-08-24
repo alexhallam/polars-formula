@@ -63,20 +63,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("   Basic formulas:");
     for formula in basic_formulas {
-        match p.parse(formula) {
+        match p.parse(formula.chars().collect::<Vec<_>>()) {
             Ok(spec) => {
                 let canonicalized = canonicalize(&spec);
                 let pretty_output = pretty(&canonicalized);
                 println!(
                     "   ✅ {} → {}",
-                    color_pretty.formula_original(formula),
+                    color_pretty.formula(formula),
                     color_pretty.formula(&pretty_output)
                 );
             }
             Err(_) => {
                 println!(
                     "   ❌ {} → failed to parse",
-                    color_pretty.formula_original(formula)
+                    color_pretty.formula(formula)
                 );
             }
         }
@@ -99,13 +99,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for formula in binomial_formulas {
-        match p.parse(formula) {
+        match p.parse(formula.chars().collect::<Vec<_>>()) {
             Ok(spec) => {
                 let canonicalized = canonicalize(&spec);
                 let pretty_output = pretty(&canonicalized);
                 println!(
                     "   ✅ {} → {}",
-                    color_pretty.formula_original(formula),
+                    color_pretty.formula(formula),
                     color_pretty.formula(&pretty_output)
                 );
                 if spec.family.is_some() {
@@ -115,7 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(_) => {
                 println!(
                     "   ❌ {} → failed to parse",
-                    color_pretty.formula_original(formula)
+                    color_pretty.formula(formula)
                 );
             }
         }
@@ -125,7 +125,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Demonstrate materialization with a working formula
     println!(
         "4. Materializing a working formula: {}",
-        color_pretty.formula_original("incidence ~ period + (1|herd)")
+        color_pretty.formula("incidence ~ period + (1|herd)")
     );
 
     // Also test binomial trials materialization
@@ -180,7 +180,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Demonstrate materialization with a working formula
     println!(
         "6. Materializing a working formula: {}",
-        color_pretty.formula_original("incidence ~ period + (1|herd)")
+        color_pretty.formula("incidence ~ period + (1|herd)")
     );
     let working_formula = "incidence ~ period + (1|herd)";
     match p.parse(working_formula) {
@@ -261,7 +261,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("8. Implementation Roadmap:");
     println!(
         "   ✅ Basic formula parsing: {}",
-        color_pretty.formula_original("y ~ x")
+        color_pretty.formula("y ~ x")
     );
     println!("   ✅ Group terms: (1|group)");
     println!("   ✅ Interactions and products: x1:x2, x1*x2");

@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let color_pretty = SimpleColoredPretty::default();
     println!(
         "2. Parsing formula: {}",
-        color_pretty.formula_original(formula_str)
+        color_pretty.formula(formula_str)
     );
 
     // Parse the formula using the new DSL parser
@@ -120,18 +120,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("   Debugging: Trying to parse simpler parts...");
 
             // Try just the basic formula
-            let basic_result = p.parse("angle ~ recipe");
+            let basic_result = p.parse("angle ~ recipe".chars().collect::<Vec<_>>());
             println!("   'angle ~ recipe': {:?}", basic_result.is_ok());
 
             // Try with interaction
-            let interaction_result = p.parse("angle ~ recipe * temperature");
+            let interaction_result = p.parse("angle ~ recipe * temperature".chars().collect::<Vec<_>>());
             println!(
                 "   'angle ~ recipe * temperature': {:?}",
                 interaction_result.is_ok()
             );
 
             // Try with sum
-            let sum_result = p.parse("angle ~ recipe + temperature");
+            let sum_result = p.parse("angle ~ recipe + temperature".chars().collect::<Vec<_>>());
             println!(
                 "   'angle ~ recipe + temperature': {:?}",
                 sum_result.is_ok()
