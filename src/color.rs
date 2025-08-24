@@ -134,7 +134,8 @@ impl Color {
                         result.push_str(&self.color_token(&current, in_lhs));
                         current.clear();
                     }
-                    result.push('(');
+                    // Color parentheses with operator color
+                    result.push_str(&self.operator("("));
                 }
                 ')' => {
                     // Flush current token
@@ -142,7 +143,8 @@ impl Color {
                         result.push_str(&self.color_token(&current, in_lhs));
                         current.clear();
                     }
-                    result.push(')');
+                    // Color parentheses with operator color
+                    result.push_str(&self.operator(")"));
                 }
                 ' ' => {
                     // Flush current token
