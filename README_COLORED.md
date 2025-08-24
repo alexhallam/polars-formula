@@ -11,12 +11,9 @@ The `polars-formula` library now supports colored output for formulas using the 
 
 ## Color Scheme
 
-- **Response variables** (like `mpg`, `y`): Red (#bf616a)
-- **Operators** (`~`, `+`, `*`, `:`, `-`, `^`): Yellow  
-- **Functions** (`poly`, `I`, `log`, `exp`): Blue
-- **Groups** (`(1|group)`, parentheses): Green (#a3be8c)
-- **Numbers and constants** (`1`, `2`, `0`): Yellow (#ebcb8b)
-- **Fallback**: Yellow (#ebcb8b)
+- **Response variables** (like `y`, `mpg`): Red
+- **Predictor variables** (like `x`, `wt`, `hp`, functions, numbers, groups): Blue
+- **Operators** (`~`, `+`, `*`, `:`, `-`, `^`): Yellow
 
 ## Usage
 
@@ -53,6 +50,7 @@ let no_colors = SimpleColoredPretty::new(false);
 let color_pretty = SimpleColoredPretty::default();
 
 println!("Response: {}", color_pretty.response("mpg"));
+println!("Predictor: {}", color_pretty.predictor("wt"));
 println!("Operator: {}", color_pretty.operator("~"));
 println!("Function: {}", color_pretty.function("poly"));
 println!("Group: {}", color_pretty.group("(1|group)"));

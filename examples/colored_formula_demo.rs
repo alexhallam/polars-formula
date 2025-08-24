@@ -5,7 +5,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🎨 Colored Formula Demo\n");
 
     // Create a simple dataset
-    let df: DataFrame = CsvReader::new(std::fs::File::open("examples/data/mtcars.csv")?).finish()?;
+    let df: DataFrame =
+        CsvReader::new(std::fs::File::open("examples/data/mtcars.csv")?).finish()?;
 
     // Test formulas with different complexity
     let formulas = vec![
@@ -42,13 +43,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Auto-detect colors
     let auto_colors = SimpleColoredPretty::default();
     println!("Auto-detected colors:");
-    println!("   {}", auto_colors.formula("y ~ x + poly(z, 2) + (1|group)"));
+    println!(
+        "   {}",
+        auto_colors.formula("y ~ x + poly(z, 2) + (1|group)")
+    );
     println!();
 
     // Force colors on
     let forced_colors = SimpleColoredPretty::new(true);
     println!("Forced colors on:");
-    println!("   {}", forced_colors.formula("y ~ x + poly(z, 2) + (1|group)"));
+    println!(
+        "   {}",
+        forced_colors.formula("y ~ x + poly(z, 2) + (1|group)")
+    );
     println!();
 
     // Force colors off
@@ -60,6 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Demonstrate individual color methods
     println!("🎨 Individual Color Methods:\n");
     println!("Response: {}", color_pretty.response("mpg"));
+    println!("Predictor: {}", color_pretty.predictor("wt"));
     println!("Operator: {}", color_pretty.operator("~"));
     println!("Function: {}", color_pretty.function("poly"));
     println!("Group: {}", color_pretty.group("(1|group)"));
