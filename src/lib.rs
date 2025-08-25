@@ -16,15 +16,15 @@
 //! | `y ~ x1 * x2` | Product terms (expands to x1 + x2 + x1:x2) |
 //! | `y ~ x1:x2` | Interaction terms |
 //! | `y ~ poly(x1, 2)` | Polynomial terms (x, x², x³, ...) |
-//! | `y ~ (1|group)` | Random intercepts |
-//! | `y ~ (x|group)` | Random slopes |
-//! | `y ~ (x||group)` | Uncorrelated random effects |
+//! | `y ~ (1\|group)` | Random intercepts |
+//! | `y ~ (x\|group)` | Random slopes |
+//! | `y ~ (x\|\|group)` | Uncorrelated random effects |
 //! | `y ~ I(x)` | Identity function (literal interpretation) |
 //! | `y ~ x^2` | Power terms |
 //! | `y ~ (a+b)^3` | Polynomial expansion |
 //! | `y ~ a/b` | Nesting (a + a:b) |
 //! | `y ~ b %in% a` | Nesting (b within a) |
-//! | `y | weights(w) ~ x` | Auxiliary terms (weights, se, trials, etc.) |
+//! | `y \| weights(w) ~ x` | Auxiliary terms (weights, se, trials, etc.) |
 //! | `Surv(time, event) ~ x` | Survival analysis |
 //! | `cbind(success, failure) ~ x` | Multivariate responses |
 //! | `s(x, k=10, bs="tp")` | Smooth terms (s, t2, te, ti) |
