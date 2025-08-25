@@ -445,6 +445,24 @@ impl Formula {
 /// # Ok(())
 /// # }
 /// ```
+
+/// Types of contrasts for categorical variables
+#[derive(Debug, Clone, PartialEq)]
+pub enum Contrast {
+    /// Treatment contrasts (default in R)
+    /// Creates columns for each level except the baseline
+    Treatment { baseline: Option<String> },
+    /// Sum contrasts
+    /// Creates columns for each level except the last
+    Sum,
+    /// Helmert contrasts
+    /// Creates columns comparing each level to the mean of previous levels
+    Helmert,
+    /// Polynomial contrasts
+    /// Creates orthogonal polynomial contrasts
+    Polynomial,
+}
+
 #[derive(Debug, Clone)]
 pub struct MaterializeOptions {
     /// Whether to include an intercept term in the design matrix.
@@ -517,6 +535,13 @@ pub struct MaterializeOptions {
     /// assert_eq!(opts_no_clean.clean_names, false);
     /// ```
     pub clean_names: bool,
+
+    /// Contrast settings for categorical variables
+    /// Maps variable names to their contrast types
+    pub contrasts: std::collections::HashMap<String, Contrast>,
+
+    /// Default contrast type for categorical variables not explicitly specified
+    pub default_contrast: Option<Contrast>,
 }
 
 impl Default for MaterializeOptions {
@@ -525,7 +550,23 @@ impl Default for MaterializeOptions {
             rhs_intercept: true,
             intercept_name: "Intercept",
             clean_names: true,
+            contrasts: std::collections::HashMap::new(),
+            default_contrast: Some(Contrast::Treatment { baseline: None }),
         }
+    }
+}
+
+impl MaterializeOptions {
+    /// Set a contrast for a specific categorical variable
+    pub fn with_contrast(mut self, var: &str, contrast: Contrast) -> Self {
+        self.contrasts.insert(var.to_string(), contrast);
+        self
+    }
+
+    /// Set the default contrast type for categorical variables
+    pub fn with_contrast_default(mut self, contrast: Contrast) -> Self {
+        self.default_contrast = Some(contrast);
+        self
     }
 }
 

@@ -59,12 +59,30 @@ pub fn materialize(
     Ok((y, x, z))
 }
 
+/// Check if an expression contains a -1 term (intercept removal)
+fn has_intercept_removal(expr: &Expr) -> bool {
+    match expr {
+        Expr::Sum(terms) => terms.iter().any(|term| {
+            matches!(term, Expr::Func { name, args } if name == "NEG" && args.len() == 1 && matches!(&args[0], Expr::Num(1.0)))
+        }),
+        Expr::Func { name, args } if name == "NEG" && args.len() == 1 => {
+            matches!(&args[0], Expr::Num(1.0))
+        }
+        _ => false,
+    }
+}
+
 /// Materialize a DSL Formula against a DataFrame.
 fn materialize_formula(
     df: &DataFrame,
     formula: &Formula,
-    opts: MaterializeOptions,
+    mut opts: MaterializeOptions,
 ) -> Result<(DataFrame, DataFrame, DataFrame), Error> {
+    // Check if formula has -1 term (intercept removal)
+    if has_intercept_removal(&formula.rhs) {
+        opts.rhs_intercept = false;
+    }
+
     // Materialize LHS (response)
     let y = materialize_response(df, &formula.lhs)?;
 
@@ -251,14 +269,19 @@ fn build_dataframe_from_cols(
 /// Materialize an expression to a single Series.
 fn materialize_expr(df: &DataFrame, expr: &Expr) -> Result<Series, Error> {
     match expr {
-        Expr::Var(name) => df
-            .column(name)
-            .map_err(|_| Error::Semantic(format!("Column '{}' not found in DataFrame", name)))
-            .and_then(|s| {
-                s.as_series()
-                    .ok_or_else(|| Error::Semantic("Failed to convert column to series".into()))
-            })
-            .map(|s| s.clone()),
+        Expr::Var(name) => {
+            // Check if this is a categorical variable
+            let series = df
+                .column(name)
+                .map_err(|_| Error::Semantic(format!("Column '{}' not found in DataFrame", name)))?
+                .as_series()
+                .ok_or_else(|| Error::Semantic("Failed to convert column to series".into()))?
+                .clone();
+
+            // For now, just return the original series
+            // TODO: Implement categorical contrasts
+            Ok(series)
+        }
         Expr::Num(n) => {
             let n_rows = df.height();
             Ok(Float64Chunked::from_slice("constant".into(), &vec![*n; n_rows]).into_series())
@@ -282,17 +305,51 @@ fn materialize_expr(df: &DataFrame, expr: &Expr) -> Result<Series, Error> {
         }
         Expr::Interaction(terms) => {
             // For interactions, multiply the terms
-            // TODO: Implement proper interaction materialization
-            if let Some(first_term) = terms.first() {
-                materialize_expr(df, first_term)
-            } else {
-                Err(Error::Semantic("Empty interaction expression".into()))
+            if terms.is_empty() {
+                return Err(Error::Semantic("Empty interaction expression".into()));
             }
+
+            let mut result: Option<Series> = None;
+
+            for term in terms {
+                let term_series = materialize_expr(df, term)?;
+
+                if let Some(ref current) = result {
+                    // Element-wise multiplication
+                    result = Some((&*current * &term_series).map_err(|e| {
+                        Error::Semantic(format!("Failed to multiply interaction terms: {}", e))
+                    })?);
+                } else {
+                    result = Some(term_series);
+                }
+            }
+
+            result.ok_or_else(|| Error::Semantic("Failed to materialize interaction".into()))
         }
         Expr::Func { name, args } => {
             // Handle special functions
             match name.as_str() {
-                "poly" => materialize_poly(df, args),
+                "poly" => {
+                    // For poly() in materialize_expr, just return the first polynomial term
+                    // The full expansion is handled in materialize_expr_to_columns_with_random
+                    let poly_cols = materialize_poly_to_columns(df, args)?;
+                    if let Some((_, first_series)) = poly_cols.first() {
+                        Ok(first_series.clone())
+                    } else {
+                        Err(Error::Semantic("poly() returned no columns".into()))
+                    }
+                }
+                "NEG" => {
+                    // Negation function - negate the inner expression
+                    if let Some(inner) = args.first() {
+                        let inner_series = materialize_expr(df, inner)?;
+                        // For now, just return the inner series
+                        // TODO: Implement proper negation
+                        Ok(inner_series)
+                    } else {
+                        Err(Error::Semantic("NEG function with no arguments".into()))
+                    }
+                }
                 "I" => {
                     // Identity function - materialize the inner expression
                     if let Some(inner) = args.first() {
@@ -388,14 +445,32 @@ fn materialize_expr_to_columns_with_random(
         }
         Expr::Interaction(terms) => {
             // For interactions, create a product of the terms
-            // TODO: Implement proper interaction materialization
-            if let Some(first_term) = terms.first() {
-                let (fixed_cols, random_cols) =
-                    materialize_expr_to_columns_with_random(df, first_term)?;
-                Ok((fixed_cols, random_cols))
-            } else {
-                Ok((Vec::new(), Vec::new()))
+            if terms.is_empty() {
+                return Ok((Vec::new(), Vec::new()));
             }
+
+            // Materialize each term to get individual series
+            let mut term_series = Vec::new();
+            for term in terms {
+                let series = materialize_expr(df, term)?;
+                term_series.push(series);
+            }
+
+            // Multiply all terms together to create the interaction
+            let mut result = term_series.remove(0);
+            for series in term_series {
+                result = (&result * &series).map_err(|e| {
+                    Error::Semantic(format!("Failed to multiply interaction terms: {}", e))
+                })?;
+            }
+
+            // Create interaction column name
+            let interaction_name = match terms.as_slice() {
+                [Expr::Var(name1), Expr::Var(name2)] => format!("{}_x_{}", name1, name2),
+                _ => "interaction".to_string(),
+            };
+
+            Ok((vec![(interaction_name, result)], Vec::new()))
         }
         Expr::Prod(terms) => {
             // For products, expand into main effects and interactions
@@ -408,6 +483,48 @@ fn materialize_expr_to_columns_with_random(
                 random_cols.extend(term_random);
             }
             Ok((fixed_cols, random_cols))
+        }
+        Expr::Func { name, args } if name == "NEG" => {
+            // Handle negation - for -1, this should remove intercept, not create a column
+            if args.len() == 1 {
+                if let Expr::Num(1.0) = &args[0] {
+                    // This is -1, which should remove intercept, not create a column
+                    Ok((Vec::new(), Vec::new()))
+                } else {
+                    // This is -something_else, materialize the inner expression
+                    let (fixed_cols, random_cols) =
+                        materialize_expr_to_columns_with_random(df, &args[0])?;
+                    Ok((fixed_cols, random_cols))
+                }
+            } else {
+                Err(Error::Semantic(
+                    "NEG function with wrong number of arguments".into(),
+                ))
+            }
+        }
+        Expr::Func { name, args } if name == "poly" => {
+            // Handle polynomial expansion - return multiple columns
+            let poly_cols = materialize_poly_to_columns(df, args)?;
+            Ok((poly_cols, Vec::new()))
+        }
+        Expr::Var(name) => {
+            // Handle categorical variables
+            let series = df
+                .column(name)
+                .map_err(|_| Error::Semantic(format!("Column '{}' not found in DataFrame", name)))?
+                .as_series()
+                .ok_or_else(|| Error::Semantic("Failed to convert column to series".into()))?
+                .clone();
+
+            // Check if this is a categorical variable (string type)
+            if let Ok(str_series) = series.str() {
+                // This is a categorical variable - create contrast columns
+                let contrast_cols = create_categorical_contrasts(&str_series, name)?;
+                Ok((contrast_cols, Vec::new()))
+            } else {
+                // This is a numeric variable - return as single column
+                Ok((vec![(name.clone(), series)], Vec::new()))
+            }
         }
         _ => {
             // For single expressions, materialize to one column (fixed effect)
@@ -449,8 +566,11 @@ fn materialize_expr_to_columns(
     Ok(all_cols)
 }
 
-/// Materialize a polynomial function.
-fn materialize_poly(df: &DataFrame, args: &[Expr]) -> Result<Series, Error> {
+/// Materialize a polynomial function to multiple columns.
+fn materialize_poly_to_columns(
+    df: &DataFrame,
+    args: &[Expr],
+) -> Result<Vec<(String, Series)>, Error> {
     if args.len() != 2 {
         return Err(Error::Semantic(
             "poly() requires exactly 2 arguments".into(),
@@ -471,7 +591,7 @@ fn materialize_poly(df: &DataFrame, args: &[Expr]) -> Result<Series, Error> {
     };
 
     // Get the degree
-    let _degree = match degree_expr {
+    let degree = match degree_expr {
         Expr::Num(n) => *n as usize,
         _ => {
             return Err(Error::Semantic(
@@ -479,6 +599,29 @@ fn materialize_poly(df: &DataFrame, args: &[Expr]) -> Result<Series, Error> {
             ))
         }
     };
+
+    // Extract optional arguments
+    let raw = args
+        .get(2)
+        .and_then(|arg| {
+            if let Expr::Bool(b) = arg {
+                Some(*b)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(false);
+
+    let _normalize = args
+        .get(3)
+        .and_then(|arg| {
+            if let Expr::Bool(b) = arg {
+                Some(*b)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(true);
 
     // Get the variable column
     let var_series = df
@@ -488,9 +631,182 @@ fn materialize_poly(df: &DataFrame, args: &[Expr]) -> Result<Series, Error> {
         .ok_or_else(|| Error::Semantic("Failed to convert column to series".into()))?
         .clone();
 
-    // For now, just return the original series
-    // TODO: Implement proper polynomial expansion
-    Ok(var_series)
+    // Convert to f64 for polynomial operations
+    let f64_series = var_series.f64().map_err(|_| {
+        Error::Semantic(format!(
+            "Column '{}' cannot be converted to numeric for polynomial expansion",
+            var_name
+        ))
+    })?;
+
+    if raw {
+        // Raw polynomials: [x, x², x³, ...]
+        let mut poly_cols = Vec::new();
+
+        for d in 1..=degree {
+            let col_name = if d == 1 {
+                var_name.clone()
+            } else {
+                format!("{}_{}", var_name, d)
+            };
+
+            // Compute the actual polynomial term using Polars power operations
+            let poly_series = if d == 1 {
+                f64_series.clone().into_series()
+            } else {
+                // Use Polars power operation: apply_values with pow
+                let power_series = f64_series.apply_values(|x| x.powi(d as i32));
+                power_series.into_series()
+            };
+
+            poly_cols.push((col_name, poly_series));
+        }
+
+        Ok(poly_cols)
+    } else {
+        // Orthogonal polynomials (numerically stable)
+        // For degree > 1, return multiple columns
+        let orthogonal_polys = compute_orthogonal_polynomials(&f64_series, degree)?;
+        let mut poly_cols = Vec::new();
+        for (i, poly) in orthogonal_polys.into_iter().enumerate() {
+            let col_name = format!("poly_{}_{}", var_name, i + 1);
+            poly_cols.push((col_name, poly.into_series()));
+        }
+        Ok(poly_cols)
+    }
+}
+
+/// Compute orthogonal polynomials using QR decomposition like R's poly() function
+fn compute_orthogonal_polynomials(
+    series: &Float64Chunked,
+    degree: usize,
+) -> Result<Vec<Float64Chunked>, Error> {
+    if degree == 0 {
+        return Ok(Vec::new());
+    }
+
+    let n = series.len();
+    if n == 0 {
+        return Ok(Vec::new());
+    }
+
+    // Step 1: Center the data (subtract mean)
+    let mean = series.mean().unwrap_or(0.0);
+    let centered = series - mean;
+
+    if degree == 1 {
+        // For degree 1, return the centered and normalized series
+        // R's poly() normalizes by sqrt(norm2) where norm2 is from QR decomposition
+        // For degree 1, norm2 is the sum of squares of the centered values
+        let norm2 = (&centered * &centered).sum().unwrap_or(0.0);
+        let scale_factor = norm2.sqrt(); // Use sqrt(norm2) to match R's scaling
+        if scale_factor > 0.0 {
+            return Ok(vec![(&centered / scale_factor).into()]);
+        } else {
+            return Ok(vec![centered.into()]);
+        }
+    }
+
+    // Step 2: Create the design matrix X with powers 0 to degree
+    // X = [1, x, x^2, ..., x^degree]
+    let mut x_matrix = vec![vec![1.0; n]; degree + 1];
+    for i in 1..=degree {
+        for j in 0..n {
+            x_matrix[i][j] = centered.get(j).unwrap_or(0.0).powi(i as i32);
+        }
+    }
+
+    // Step 3: Perform QR decomposition manually (simplified version)
+    // This is a simplified QR decomposition that approximates R's behavior
+    let mut q_matrix = vec![vec![0.0; n]; degree + 1];
+    let mut r_matrix = vec![vec![0.0; degree + 1]; degree + 1];
+
+    // Gram-Schmidt orthogonalization with QR-like normalization
+    for i in 0..=degree {
+        // Start with the i-th column of X
+        let mut q_col = x_matrix[i].clone();
+
+        // Orthogonalize against previous columns
+        for j in 0..i {
+            let dot_product: f64 = q_col.iter().zip(&q_matrix[j]).map(|(a, b)| a * b).sum();
+            let norm_sq: f64 = q_matrix[j].iter().map(|x| x * x).sum();
+
+            if norm_sq > 0.0 {
+                let proj_coeff = dot_product / norm_sq;
+                for k in 0..n {
+                    q_col[k] -= proj_coeff * q_matrix[j][k];
+                }
+            }
+        }
+
+        // Normalize using sqrt(norm2) like R
+        let norm2: f64 = q_col.iter().map(|x| x * x).sum();
+        let scale_factor = norm2.sqrt();
+
+        if scale_factor > 0.0 {
+            for k in 0..n {
+                q_matrix[i][k] = q_col[k] / scale_factor;
+            }
+            r_matrix[i][i] = scale_factor;
+        } else {
+            q_matrix[i] = q_col;
+            r_matrix[i][i] = 0.0;
+        }
+    }
+
+    // Step 4: Extract the orthogonal polynomials (skip the constant term)
+    let mut result = Vec::new();
+    for i in 1..=degree {
+        let poly_series = Float64Chunked::from_slice("poly".into(), &q_matrix[i]).into_series();
+        result.push(poly_series.f64().unwrap().clone());
+    }
+
+    Ok(result)
+}
+
+/// Create contrast columns for categorical variables
+fn create_categorical_contrasts(
+    series: &StringChunked,
+    var_name: &str,
+) -> Result<Vec<(String, Series)>, Error> {
+    // Get unique levels and sort them
+    let mut levels: Vec<String> = series
+        .into_iter()
+        .filter_map(|s| s.map(|s| s.to_string()))
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    levels.sort();
+
+    if levels.len() <= 1 {
+        // Single level or empty - return empty
+        return Ok(Vec::new());
+    }
+
+    // For now, implement treatment contrasts (default)
+    // TODO: Support different contrast types from MaterializeOptions
+    let mut contrast_cols = Vec::new();
+
+    // Create treatment contrasts (skip first level as baseline)
+    for level in &levels[1..] {
+        let col_name = format!("{}_{}", var_name, level);
+        let mut col_data = vec![0.0; series.len()];
+
+        // Set to 1.0 for rows where series == level
+        for (i, val) in series.into_iter().enumerate() {
+            if let Some(val_str) = val {
+                if val_str.to_string() == *level {
+                    col_data[i] = 1.0;
+                }
+            }
+        }
+
+        let contrast_series =
+            Float64Chunked::from_slice((&col_name).into(), &col_data).into_series();
+        contrast_cols.push((col_name, contrast_series));
+    }
+
+    Ok(contrast_cols)
 }
 
 /// Materialize a group expression to random effects columns.
