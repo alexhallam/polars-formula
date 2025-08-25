@@ -690,6 +690,19 @@ fn compute_orthogonal_polynomials(
         return Ok(Vec::new());
     }
 
+    // Check that degree is less than number of unique points (R's constraint)
+    let unique_count = series
+        .unique()
+        .map_err(|e| Error::Semantic(format!("Failed to get unique values: {}", e)))?
+        .len();
+
+    if degree >= unique_count {
+        return Err(Error::Semantic(format!(
+            "'degree' must be less than number of unique points. Got degree={}, unique points={}",
+            degree, unique_count
+        )));
+    }
+
     // Step 1: Center the data (subtract mean)
     let mean = series.mean().unwrap_or(0.0);
     let centered = series - mean;

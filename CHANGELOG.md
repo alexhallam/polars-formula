@@ -122,6 +122,7 @@ mm <- model.matrix(formula, df)
 - **Polynomial normalization**: Fixed incorrect scaling factors that were causing polynomial values to be off by orders of magnitude
 - **Degree handling**: Fixed issue where higher-degree polynomials were not being computed correctly
 - **Return type**: Changed function to return `Vec<Float64Chunked>` for proper handling of multiple polynomial terms
+- **Degree validation**: Added validation to ensure polynomial degree is less than the number of unique points in the data (matching R's behavior)
 
 ## [0.3.2] - 2024-12-19
 
