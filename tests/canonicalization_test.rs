@@ -98,10 +98,10 @@ fn test_canonicalize_interactions() {
 
 #[test]
 fn test_expand_star_function() {
-    // Test the expand_star helper function directly
+    // Test the canonicalize_expr function directly
     let prod_expr = Expr::Prod(vec![Expr::Var("x".to_string()), Expr::Var("y".to_string())]);
 
-    let expanded = expand_star(&prod_expr);
+    let expanded = canonicalize_expr(prod_expr);
 
     if let Expr::Sum(terms) = expanded {
         assert!(terms.len() >= 3); // x, y, x:y
@@ -114,7 +114,7 @@ fn test_expand_star_function() {
         assert!(has_y);
         assert!(has_interaction);
     } else {
-        panic!("Expected Sum expression from expand_star");
+        panic!("Expected Sum expression from canonicalize_expr");
     }
 }
 

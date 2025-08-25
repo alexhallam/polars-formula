@@ -1,5 +1,5 @@
 use polars::prelude::*;
-use polars_formula::dsl::{parser::parser, materialize::materialize_dsl_spec, canon::*, pretty::pretty};
+use polars_formula::dsl::{parser::parser, materialize::materialize, canon::*, pretty::pretty};
 use polars_formula::MaterializeOptions;
 use chumsky::Parser;
 
@@ -20,7 +20,7 @@ fn test_group_materialization() {
     let parsed1 = p.parse(formula1).unwrap();
     let canonicalized1 = canonicalize(&parsed1);
     println!("Canonicalized: {}", pretty(&canonicalized1));
-    let result1 = materialize_dsl_spec(&df, &canonicalized1, MaterializeOptions::default());
+    let result1 = materialize(&df, &canonicalized1, MaterializeOptions::default());
     match result1 {
         Ok((_y, x, z)) => {
             println!("✅ Success!");
@@ -38,7 +38,7 @@ fn test_group_materialization() {
     let parsed2 = p.parse(formula2).unwrap();
     let canonicalized2 = canonicalize(&parsed2);
     println!("Canonicalized: {}", pretty(&canonicalized2));
-    let result2 = materialize_dsl_spec(&df, &canonicalized2, MaterializeOptions::default());
+    let result2 = materialize(&df, &canonicalized2, MaterializeOptions::default());
     match result2 {
         Ok((_y, x, z)) => {
             println!("✅ Success!");
@@ -56,7 +56,7 @@ fn test_group_materialization() {
     let parsed3 = p.parse(formula3).unwrap();
     let canonicalized3 = canonicalize(&parsed3);
     println!("Canonicalized: {}", pretty(&canonicalized3));
-    let result3 = materialize_dsl_spec(&df, &canonicalized3, MaterializeOptions::default());
+    let result3 = materialize(&df, &canonicalized3, MaterializeOptions::default());
     match result3 {
         Ok((_y, x, z)) => {
             println!("✅ Success!");

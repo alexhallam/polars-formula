@@ -1,7 +1,7 @@
 use chumsky::Parser;
 use polars::prelude::*;
 use polars_formula::dsl::{
-    canon::canonicalize, materialize::materialize_dsl_spec, parser::parser, pretty::pretty,
+    canon::canonicalize, materialize::materialize, parser::parser, pretty::pretty,
 };
 use polars_formula::{MaterializeOptions, Color};
 
@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
 
                 // Try to materialize
-                match materialize_dsl_spec(&df, &canonicalized, MaterializeOptions::default()) {
+                match materialize(&df, &canonicalized, MaterializeOptions::default()) {
                     Ok((y, x, z)) => {
                         println!("   🎯 Materialized:");
                         println!("     - Response: {} columns", y.width());

@@ -96,11 +96,6 @@ pub fn canonicalize_expr(expr: Expr) -> Expr {
     }
 }
 
-/// Expand `*` sugar for algebraic tests: a*b -> a + b + a:b
-pub fn expand_star(expr: &Expr) -> Expr {
-    canonicalize_expr(expr.clone())
-}
-
 /// Expand star terms: [a, b, c] -> a + b + c + a:b + a:c + b:c + a:b:c
 fn expand_star_terms(terms: Vec<Expr>) -> Expr {
     if terms.len() < 2 {

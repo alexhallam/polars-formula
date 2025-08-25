@@ -1,6 +1,6 @@
 use chumsky::Parser;
 use polars::prelude::*;
-use polars_formula::dsl::{canon::*, materialize::materialize_dsl_spec, parser::parser, pretty::*};
+use polars_formula::dsl::{canon::*, materialize::materialize, parser::parser, pretty::*};
 use polars_formula::{MaterializeOptions, Color};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -86,7 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("5. Materializing formula...");
             let canonicalized = canonicalize(&spec);
             let materialize_result =
-                materialize_dsl_spec(&df, &canonicalized, MaterializeOptions::default());
+                materialize(&df, &canonicalized, MaterializeOptions::default());
 
             match materialize_result {
                 Ok((y, x, z)) => {

@@ -41,13 +41,11 @@
 
 #![forbid(unsafe_code)]
 
-use std::fmt::{self, Display};
-use std::str::FromStr;
-
+use chumsky::Parser as ChumskyParser;
 use polars::prelude::*;
 use thiserror::Error;
 
-// DSL module for the new comprehensive formula parser
+// DSL module for the comprehensive formula parser
 pub mod color;
 pub mod dsl;
 
@@ -128,7 +126,7 @@ pub use color::{Color, ColorConfig};
 /// # }
 /// ```
 pub struct Formula {
-    /// The parsed abstract syntax tree of the formula.
+    /// The parsed DSL ModelSpec of the formula.
     ///
     /// This field is public to allow advanced users to inspect or modify
     /// the parsed formula structure before materialization.
@@ -141,11 +139,11 @@ pub struct Formula {
     /// let formula = Formula::parse("y ~ x1 + x2")?;
     ///
     /// // Inspect the parsed structure
-    /// println!("LHS terms: {}", formula.ast.lhs.len());
-    /// println!("RHS terms: {}", formula.ast.rhs.len());
+    /// println!("Response: {:?}", formula.spec.formula.lhs);
+    /// println!("Predictors: {:?}", formula.spec.formula.rhs);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub ast: Ast,
+    pub spec: dsl::ModelSpec,
 }
 
 impl Formula {
@@ -222,10 +220,14 @@ impl Formula {
     /// - Incomplete expressions: `Formula::parse("y ~ x +")`
     /// - Invalid function calls: `Formula::parse("y ~ poly(x,)")`
     pub fn parse(src: &str) -> Result<Self, Error> {
-        let tokens = Lexer::new(src).lex_all()?;
-        let mut p = Parser::new(tokens);
-        let ast = p.parse_formula()?;
-        Ok(Self { ast })
+        let p = dsl::parser();
+        let spec = p
+            .parse(src.chars().collect::<Vec<_>>())
+            .map_err(|e| Error::Parse {
+                pos: None,
+                msg: format!("DSL parse error: {:?}", e),
+            })?;
+        Ok(Self { spec })
     }
 
     /// Materialize the formula against a DataFrame to produce design matrices.
@@ -334,7 +336,9 @@ impl Formula {
         df: &DataFrame,
         opts: MaterializeOptions,
     ) -> Result<(DataFrame, DataFrame), Error> {
-        materialize_dataframe(df, &self.ast, opts)
+        let (y, x, _z) = dsl::materialize(df, &self.spec, opts)?;
+        // For backward compatibility, return (y, x) and ignore random effects for now
+        Ok((y, x))
     }
 }
 
@@ -525,6 +529,110 @@ impl Default for MaterializeOptions {
     }
 }
 
+// --- Errors ---------------------------------------------------------------
+
+/// Errors that can occur during formula parsing and materialization.
+///
+/// This enum represents all possible errors that can arise when working with
+/// polars-formula, from parsing syntax errors to data materialization issues.
+///
+/// # Examples
+///
+/// ## Handling Parse Errors
+/// ```rust
+/// use polars_formula::{Formula, Error};
+///
+/// // This will produce a parse error
+/// match Formula::parse("y ~~ x") {
+///     Err(Error::Parse { pos, msg }) => {
+///         println!("Parse error: {}", msg);
+///     }
+///     Err(e) => println!("Other error: {}", e),
+///     Ok(_) => unreachable!(),
+/// }
+/// ```
+///
+/// ## Handling Semantic Errors
+/// ```rust
+/// use polars::prelude::*;
+/// use polars_formula::{Formula, MaterializeOptions, Error};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let df = df!("x" => [1.0, 2.0, 3.0])?;
+/// let formula = Formula::parse("y ~ x")?; // y doesn't exist
+///
+/// match formula.materialize(&df, MaterializeOptions::default()) {
+///     Err(Error::Semantic(msg)) => {
+///         println!("Data error: {}", msg); // "unknown column 'y'"
+///     }
+///     Err(e) => println!("Other error: {}", e),
+///     Ok(_) => unreachable!(),
+/// }
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Parse error during syntax analysis.
+    ///
+    /// Occurs when the formula string doesn't conform to the expected
+    /// formula grammar.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use polars_formula::{Formula, Error};
+    ///
+    /// // Incomplete expression
+    /// match Formula::parse("y ~ x +") {
+    ///     Err(Error::Parse { pos, msg }) => {
+    ///         assert!(msg.contains("unexpected end"));
+    ///     }
+    ///     _ => panic!("Expected parse error"),
+    /// }
+    /// ```
+    #[error("parse error at token {pos:?}: {msg}")]
+    Parse {
+        /// Token position where the error occurred (None if at end)
+        pos: Option<usize>,
+        /// Description of the parsing error
+        msg: String,
+    },
+
+    /// Semantic error during formula materialization.
+    ///
+    /// Occurs when the formula is syntactically correct but cannot be
+    /// materialized against the provided data due to missing columns,
+    /// type conversion failures, or other data-related issues.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use polars::prelude::*;
+    /// use polars_formula::{Formula, MaterializeOptions, Error};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let df = df!("x" => [1, 2, 3])?; // Note: integers, not floats
+    /// let formula = Formula::parse("missing_column ~ x")?;
+    ///
+    /// match formula.materialize(&df, MaterializeOptions::default()) {
+    ///     Err(Error::Semantic(msg)) => {
+    ///         assert!(msg.contains("unknown column 'missing_column'"));
+    ///     }
+    ///     _ => panic!("Expected semantic error"),
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[error("semantic error: {0}")]
+    Semantic(
+        /// Description of the semantic error
+        String,
+    ),
+}
+
+// --- Utility functions ----------------------------------------------------
+
 /// Convert a Polars DataFrame to a dense faer matrix for linear algebra operations.
 ///
 /// This function converts a numeric DataFrame (typically a design matrix) into a dense
@@ -585,31 +693,6 @@ impl Default for MaterializeOptions {
 ///
 /// println!("Design matrix shape: {}×{}", X_matrix.nrows(), X_matrix.ncols());
 /// // Can now perform matrix operations like X^T * X
-/// # Ok(())
-/// # }
-/// ```
-///
-/// ## Linear Regression Example
-/// ```rust
-/// use polars::prelude::*;
-/// use polars_formula::{Formula, MaterializeOptions, polars_to_faer, series_to_faer_col};
-///
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let df = df!(
-///     "price" => [100.0, 150.0, 200.0, 250.0],
-///     "size" => [1000.0, 1500.0, 2000.0, 2500.0]
-/// )?;
-///
-/// let formula = Formula::parse("price ~ size")?;
-/// let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
-///
-/// // Convert to matrices
-/// let X_mat = polars_to_faer(&X)?;
-/// let y_vec = series_to_faer_col(&y)?;
-///
-/// // Ready for linear algebra: β = (X^T X)^{-1} X^T y
-/// println!("Ready for regression with X: {}×{}, y: {}",
-///          X_mat.nrows(), X_mat.ncols(), y_vec.nrows());
 /// # Ok(())
 /// # }
 /// ```
@@ -705,35 +788,6 @@ pub fn polars_to_faer(df: &DataFrame) -> Result<faer::Mat<f64>, Error> {
 /// let y_vector = series_to_faer_col(&y)?;
 ///
 /// println!("Response vector length: {}", y_vector.nrows());
-/// # Ok(())
-/// # }
-/// ```
-///
-/// ## Complete Linear Regression Setup
-/// ```rust
-/// use polars::prelude::*;
-/// use polars_formula::{Formula, MaterializeOptions, polars_to_faer, series_to_faer_col};
-///
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let df = df!(
-///     "sales" => [100.0, 200.0, 300.0, 400.0, 500.0],
-///     "advertising" => [10.0, 20.0, 30.0, 40.0, 50.0],
-///     "price" => [5.0, 4.5, 4.0, 3.5, 3.0]
-/// )?;
-///
-/// let formula = Formula::parse("sales ~ advertising + price")?;
-/// let (y, X) = formula.materialize(&df, MaterializeOptions::default())?;
-///
-/// // Convert to faer matrices
-/// let X_matrix = polars_to_faer(&X)?;
-/// let y_vector = series_to_faer_col(&y)?;
-///
-/// // Now ready for linear algebra operations
-/// assert_eq!(X_matrix.nrows(), y_vector.nrows()); // Same number of observations
-///
-/// // Example: compute X^T * y
-/// let xty = X_matrix.transpose() * &y_vector;
-/// println!("X^T * y computed, shape: {}×{}", xty.nrows(), xty.ncols());
 /// # Ok(())
 /// # }
 /// ```
@@ -912,876 +966,13 @@ pub fn make_clean_names(name: &str) -> String {
     result
 }
 
-/// Low-level function to materialize a parsed AST against a DataFrame.
-///
-/// This function is used internally by `Formula::materialize()` but is exposed
-/// for advanced use cases where you need direct control over the AST.
-///
-/// # Arguments
-///
-/// * `df` - The DataFrame containing the data
-/// * `ast` - The parsed abstract syntax tree of the formula
-/// * `opts` - Materialization options
-///
-/// # Returns
-///
-/// Returns `(Series, DataFrame)` representing the response variable and design matrix.
-///
-/// # Examples
-///
-/// ```rust
-/// use polars::prelude::*;
-/// use polars_formula::{Formula, MaterializeOptions, materialize_dataframe};
-///
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let df = df!(
-///     "y" => [1.0, 2.0, 3.0],
-///     "x" => [1.0, 2.0, 3.0]
-/// )?;
-///
-/// let formula = Formula::parse("y ~ x")?;
-/// // Access the internal AST for advanced processing
-/// let (y, X) = materialize_dataframe(&df, &formula.ast, MaterializeOptions::default())?;
-///
-/// assert_eq!(y.len(), 3);
-/// assert_eq!(X.width(), 2); // Intercept + x
-/// # Ok(())
-/// # }
-/// ```
-///
-/// # Note
-///
-/// Most users should use `Formula::materialize()` instead of this function.
-/// This is primarily for library authors and advanced use cases.
-pub fn materialize_dataframe(
-    df: &DataFrame,
-    ast: &Ast,
-    opts: MaterializeOptions,
-) -> Result<(DataFrame, DataFrame), Error> {
-    let (lhs_terms, rhs_terms) = (&ast.lhs, &ast.rhs);
+// --- Internal helper functions --------------------------------------------
 
-    // --- LHS: expect exactly one term that yields exactly one column
-    let y_cols = eval_terms(df, lhs_terms)?;
-    let y = match y_cols.as_slice() {
-        [(name, s)] => {
-            // cast to f64 for downstream LA
-            let s = cast_to_f64_named(name, s)?;
-            // Convert Series to DataFrame
-            s.into_frame()
-        }
-        [] => return Err(Error::Semantic("lhs is empty; expected a target".into())),
-        _ => return Err(Error::Semantic("lhs must materialize to one column".into())),
-    };
-
-    // --- RHS
-    let mut cols = Vec::<(String, Series)>::new();
-    // Add intercept unless explicitly excluded by -1 in formula or opts.rhs_intercept is false
-    if opts.rhs_intercept && !ast.exclude_intercept {
-        let n = df.height();
-        let ones =
-            Float64Chunked::from_slice(opts.intercept_name.into(), &vec![1.0; n]).into_series();
-        cols.push((opts.intercept_name.to_string(), ones));
-    }
-
-    cols.extend(eval_terms(df, rhs_terms)?);
-
-    // Build X DataFrame preserving column order
-    let (names, series): (Vec<_>, Vec<_>) = cols.into_iter().unzip();
-    // Ensure unique column names by adding suffixes if needed
-    let mut unique_series = Vec::new();
-    let mut name_counts = std::collections::HashMap::new();
-
-    for (name, s) in names.into_iter().zip(series.into_iter()) {
-        let count = name_counts.entry(name.clone()).or_insert(0);
-        *count += 1;
-        let unique_name = if *count > 1 {
-            format!("{}_{}", name, *count - 1)
-        } else {
-            name
-        };
-
-        // Apply name cleaning if requested
-        let final_name = if opts.clean_names {
-            make_clean_names(&unique_name)
-        } else {
-            unique_name
-        };
-
-        let mut new_series = s.clone();
-        new_series.rename(final_name.into());
-        unique_series.push(new_series.into());
-    }
-
-    let x = DataFrame::new(unique_series).map_err(|e| Error::Semantic(e.to_string()))?;
-
-    Ok((y, x))
-}
-
-// --- AST ------------------------------------------------------------------
-
-/// Abstract Syntax Tree representation of a parsed formula.
-///
-/// An `Ast` represents the parsed structure of a statistical formula, containing
-/// the left-hand side (response variables) and right-hand side (predictor terms).
-///
-/// # Structure
-///
-/// - `lhs`: Terms on the left side of `~` (typically the response variable)
-/// - `rhs`: Terms on the right side of `~` (predictor variables and transformations)
-///
-/// # Examples
-///
-/// ```rust
-/// use polars_formula::Formula;
-///
-/// // Parse a formula to get its AST
-/// let formula = Formula::parse("sales ~ advertising + price + advertising:price")?;
-/// let ast = &formula.ast;
-///
-/// // Inspect the structure
-/// println!("Response terms: {}", ast.lhs.len());  // 1 (sales)
-/// println!("Predictor terms: {}", ast.rhs.len()); // 3 (advertising, price, interaction)
-/// # Ok::<(), Box<dyn std::error::Error>>(())
-/// ```
-///
-/// For formulas without `~`, the entire expression is treated as RHS:
-/// ```rust
-/// use polars_formula::Formula;
-///
-/// let formula = Formula::parse("x1 + x2 + x1:x2")?;
-/// let ast = &formula.ast;
-///
-/// assert_eq!(ast.lhs.len(), 0); // No response variable specified
-/// assert_eq!(ast.rhs.len(), 3); // Three predictor terms
-/// # Ok::<(), Box<dyn std::error::Error>>(())
-/// ```
-#[derive(Debug, Clone)]
-pub struct Ast {
-    /// Terms representing the response variable(s) (left side of `~`)
-    pub lhs: Vec<Term>,
-    /// Terms representing the predictor variables and transformations (right side of `~`)
-    pub rhs: Vec<Term>,
-    /// Whether to exclude the intercept (set to true when `-1` is present)
-    pub exclude_intercept: bool,
-}
-
-/// A term in a formula expression.
-///
-/// Terms represent the building blocks of formulas, including variables,
-/// function calls, interactions, and grouped expressions.
-#[derive(Debug, Clone)]
-pub enum Term {
-    Var(String),
-    Func(FuncCall),
-    Interaction(Vec<Term>),
-    Group(Box<Vec<Term>>),
-}
-
-/// A function call in a formula expression.
-///
-/// Represents functions like `poly(x, 3)` or `log(income)`.
-#[derive(Debug, Clone)]
-pub struct FuncCall {
-    /// The name of the function
-    pub name: String,
-    /// Arguments passed to the function
-    pub args: Vec<Arg>,
-}
-
-/// An argument to a function call.
-///
-/// Arguments can be either terms (expressions) or numeric literals.
-#[derive(Debug, Clone)]
-pub enum Arg {
-    /// A term argument (like a variable or expression)
-    Term(Term),
-    /// A numeric literal argument
-    Number(f64),
-}
-
-// --- Lexer ----------------------------------------------------------------
-
-#[derive(Debug, Clone, PartialEq)]
-enum TokKind {
-    Ident(String),
-    Number(f64),
-    Tilde,
-    Plus,
-    Minus,
-    Colon,
-    Comma,
-    LParen,
-    RParen,
-    Dot,
-}
-
-#[derive(Debug, Clone)]
-struct Token {
-    kind: TokKind,
-    pos: usize,
-}
-
-#[derive(Debug)]
-struct Lexer<'a> {
-    s: &'a str,
-    it: std::str::CharIndices<'a>,
-    peek: Option<(usize, char)>,
-}
-
-impl<'a> Lexer<'a> {
-    fn new(s: &'a str) -> Self {
-        let mut it = s.char_indices();
-        let peek = it.next();
-        Self { s, it, peek }
-    }
-
-    fn bump(&mut self) -> Option<(usize, char)> {
-        let cur = self.peek;
-        self.peek = self.it.next();
-        cur
-    }
-
-    fn lex_all(mut self) -> Result<Vec<Token>, Error> {
-        let mut out = Vec::new();
-        while let Some((i, ch)) = self.peek {
-            match ch {
-                ' ' | '\t' | '\n' | '\r' => {
-                    self.bump();
-                }
-                '~' => {
-                    self.bump();
-                    out.push(Token {
-                        kind: TokKind::Tilde,
-                        pos: i,
-                    });
-                }
-                '+' => {
-                    self.bump();
-                    out.push(Token {
-                        kind: TokKind::Plus,
-                        pos: i,
-                    });
-                }
-                '-' => {
-                    self.bump();
-                    out.push(Token {
-                        kind: TokKind::Minus,
-                        pos: i,
-                    });
-                }
-                ':' => {
-                    self.bump();
-                    out.push(Token {
-                        kind: TokKind::Colon,
-                        pos: i,
-                    });
-                }
-                ',' => {
-                    self.bump();
-                    out.push(Token {
-                        kind: TokKind::Comma,
-                        pos: i,
-                    });
-                }
-                '(' => {
-                    self.bump();
-                    out.push(Token {
-                        kind: TokKind::LParen,
-                        pos: i,
-                    });
-                }
-                ')' => {
-                    self.bump();
-                    out.push(Token {
-                        kind: TokKind::RParen,
-                        pos: i,
-                    });
-                }
-                '.' => {
-                    self.bump();
-                    out.push(Token {
-                        kind: TokKind::Dot,
-                        pos: i,
-                    });
-                }
-                '0'..='9' => out.push(self.lex_number()?),
-                'a'..='z' | 'A'..='Z' | '_' => out.push(self.lex_ident()?),
-                _ => {
-                    return Err(Error::Lex {
-                        pos: i,
-                        msg: format!("unexpected char '{ch}'"),
-                    });
-                }
-            }
-        }
-        Ok(out)
-    }
-
-    fn lex_ident(&mut self) -> Result<Token, Error> {
-        let (start, _) = self.bump().unwrap();
-        let mut end = start + 1;
-        while let Some((i, ch)) = self.peek {
-            if ch.is_ascii_alphanumeric() || ch == '_' {
-                self.bump();
-                end = i + ch.len_utf8();
-            } else {
-                break;
-            }
-        }
-        let text = &self.s[start..end];
-        Ok(Token {
-            kind: TokKind::Ident(text.to_string()),
-            pos: start,
-        })
-    }
-
-    fn lex_number(&mut self) -> Result<Token, Error> {
-        let (start, c0) = self.bump().unwrap();
-        let mut end = start + c0.len_utf8();
-        let mut seen_dot = false;
-        while let Some((i, ch)) = self.peek {
-            match ch {
-                '0'..='9' => {
-                    self.bump();
-                    end = i + 1;
-                }
-                '.' if !seen_dot => {
-                    self.bump();
-                    end = i + 1;
-                    seen_dot = true;
-                }
-                _ => break,
-            }
-        }
-        let text = &self.s[start..end];
-        let val = f64::from_str(text).map_err(|_| Error::Lex {
-            pos: start,
-            msg: format!("bad number '{text}'"),
-        })?;
-        Ok(Token {
-            kind: TokKind::Number(val),
-            pos: start,
-        })
-    }
-}
-
-// --- Parser (Pratt-ish) ---------------------------------------------------
-
-#[derive(Debug)]
-struct Parser {
-    tokens: Vec<Token>,
-    idx: usize,
-}
-
-impl Parser {
-    fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, idx: 0 }
-    }
-
-    fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.idx)
-    }
-    fn bump(&mut self) -> Option<&Token> {
-        let t = self.tokens.get(self.idx);
-        if t.is_some() {
-            self.idx += 1;
-        }
-        t
-    }
-
-    fn expect(&mut self, expect: &TokKind) -> Result<(), Error> {
-        match self.bump() {
-            Some(t) if &t.kind == expect => Ok(()),
-            Some(t) => Err(Error::Parse {
-                pos: Some(t.pos),
-                msg: format!("expected {:?}, got {:?}", expect, t.kind),
-            }),
-            None => Err(Error::Parse {
-                pos: None,
-                msg: "unexpected end".into(),
-            }),
-        }
-    }
-
-    fn parse_formula(&mut self) -> Result<Ast, Error> {
-        let (lhs_terms, exclude_intercept) = self.parse_sum_terms()?;
-        if let Some(t) = self.peek() {
-            if matches!(t.kind, TokKind::Tilde) {
-                self.bump();
-                // Handle empty RHS after tilde
-                let (rhs_terms, rhs_exclude_intercept) = if self.peek().is_some() {
-                    self.parse_sum_terms()?
-                } else {
-                    (Vec::new(), false)
-                };
-                return Ok(Ast {
-                    lhs: lhs_terms,
-                    rhs: rhs_terms,
-                    exclude_intercept: exclude_intercept || rhs_exclude_intercept,
-                });
-            }
-        }
-        // No '~' -> rhs-only formula; lhs empty
-        Ok(Ast {
-            lhs: Vec::new(),
-            rhs: lhs_terms,
-            exclude_intercept,
-        })
-    }
-
-    // sum := prod ( ("+" | "-") prod )*
-    fn parse_sum_terms(&mut self) -> Result<(Vec<Term>, bool), Error> {
-        let mut terms = Vec::new();
-        let mut exclude_intercept = false;
-        let mut first = true;
-        loop {
-            if !first {
-                match self.peek() {
-                    Some(t) if matches!(t.kind, TokKind::Plus) => {
-                        self.bump();
-                    }
-                    Some(t) if matches!(t.kind, TokKind::Minus) => {
-                        self.bump();
-                        // Check if the next token is a number 1 (for -1 intercept removal)
-                        if let Some(next_t) = self.peek() {
-                            if matches!(next_t.kind, TokKind::Number(1.0)) {
-                                self.bump(); // consume the 1
-                                exclude_intercept = true;
-                                break; // Stop parsing after -1
-                            }
-                        }
-                    }
-                    _ => break,
-                }
-            }
-            first = false;
-            let term = self.parse_prod()?;
-            terms.push(term);
-        }
-        Ok((terms, exclude_intercept))
-    }
-
-    // prod := atom ( ":" atom )*
-    fn parse_prod(&mut self) -> Result<Term, Error> {
-        let mut atoms = vec![self.parse_atom()?];
-        while let Some(t) = self.peek() {
-            if matches!(t.kind, TokKind::Colon) {
-                self.bump();
-                atoms.push(self.parse_atom()?);
-            } else {
-                break;
-            }
-        }
-        if atoms.len() == 1 {
-            Ok(atoms.pop().unwrap())
-        } else {
-            Ok(Term::Interaction(atoms))
-        }
-    }
-
-    // atom := IDENT | IDENT '(' args ')' | '(' sum ')' | '.' | NUMBER
-    fn parse_atom(&mut self) -> Result<Term, Error> {
-        let t = self
-            .bump()
-            .ok_or_else(|| Error::Parse {
-                pos: None,
-                msg: "unexpected end".into(),
-            })?
-            .clone();
-        match t.kind {
-            TokKind::Ident(name) => {
-                // function or variable
-                if let Some(Token {
-                    kind: TokKind::LParen,
-                    ..
-                }) = self.peek()
-                {
-                    // lookahead
-                    self.bump(); // consume '('
-                    let args = self.parse_args()?;
-                    self.expect(&TokKind::RParen)?;
-                    Ok(Term::Func(FuncCall { name, args }))
-                } else {
-                    Ok(Term::Var(name))
-                }
-            }
-            TokKind::LParen => {
-                let (inner, _) = self.parse_sum_terms()?;
-                self.expect(&TokKind::RParen)?;
-                Ok(Term::Group(Box::new(inner)))
-            }
-            TokKind::Number(v) => {
-                // treat 1/0 as special constants later (e.g., intercept control)
-                Ok(Term::Func(FuncCall {
-                    name: "const".into(),
-                    args: vec![Arg::Number(v)],
-                }))
-            }
-            TokKind::Dot => Ok(Term::Func(FuncCall {
-                name: "dot".into(),
-                args: vec![],
-            })),
-            other => Err(Error::Parse {
-                pos: Some(t.pos),
-                msg: format!("unexpected token in atom: {:?}", other),
-            }),
-        }
-    }
-
-    fn parse_args(&mut self) -> Result<Vec<Arg>, Error> {
-        let mut args = Vec::new();
-        // empty arg list
-        if let Some(Token {
-            kind: TokKind::RParen,
-            ..
-        }) = self.peek()
-        {
-            return Ok(args);
-        }
-        loop {
-            // number or term
-            match self.peek().cloned() {
-                Some(Token {
-                    kind: TokKind::Number(v),
-                    ..
-                }) => {
-                    self.bump();
-                    args.push(Arg::Number(v));
-                }
-                _ => {
-                    let term = self.parse_prod()?;
-                    args.push(Arg::Term(term));
-                }
-            }
-            match self.peek() {
-                Some(Token {
-                    kind: TokKind::Comma,
-                    ..
-                }) => {
-                    self.bump();
-                }
-                _ => break,
-            }
-        }
-        Ok(args)
-    }
-}
-
-// --- Materialization ------------------------------------------------------
-
-fn eval_terms(df: &DataFrame, terms: &[Term]) -> Result<Vec<(String, Series)>, Error> {
-    let mut out = Vec::new();
-    for t in terms {
-        eval_term(df, t, &mut out, None)?;
-    }
-    Ok(out)
-}
-
-fn eval_term(
-    df: &DataFrame,
-    term: &Term,
-    out: &mut Vec<(String, Series)>,
-    prefix: Option<String>,
-) -> Result<(), Error> {
-    match term {
-        Term::Var(name) => {
-            let s = df
-                .column(name)
-                .map_err(|_| Error::Semantic(format!("unknown column '{name}'")))?;
-            let series = s.as_series().unwrap();
-            let s = cast_to_f64_named(name, series)?;
-            let n = prefix_name(prefix.as_deref(), name);
-            out.push((n, s));
-        }
-        Term::Group(inner) => {
-            for t in inner.as_ref() {
-                eval_term(df, t, out, prefix.clone())?;
-            }
-        }
-        Term::Interaction(parts) => {
-            // For each part, expand into its own columns, then take cartesian product and multiply
-            let mut groups: Vec<Vec<(String, Series)>> = Vec::new();
-            for p in parts {
-                let mut g = Vec::new();
-                eval_term(df, p, &mut g, None)?;
-                groups.push(g);
-            }
-            let acc: Vec<(String, Series)> = groups.into_iter().fold(Vec::new(), |acc, g| {
-                if acc.is_empty() {
-                    return g;
-                }
-                let mut new_acc = Vec::new();
-                for (n1, s1) in acc.iter() {
-                    let s1 = cast_to_f64_named(n1, s1).expect("cast");
-                    let ca1 = s1.f64().unwrap().clone();
-                    for (n2, s2) in g.iter() {
-                        let s2 = cast_to_f64_named(n2, s2).expect("cast");
-                        let ca2 = s2.f64().unwrap();
-                        let prod = &ca1 * ca2;
-                        let name = format!("{n1}:{n2}");
-                        new_acc.push((name, prod.into_series()));
-                    }
-                }
-                new_acc
-            });
-            if !acc.is_empty() {
-                out.extend(acc.into_iter());
-            }
-        }
-        Term::Func(FuncCall { name, args }) => {
-            match name.as_str() {
-                // poly(x, d)
-                "poly" => {
-                    if args.len() != 2 {
-                        return Err(Error::Semantic(
-                            "poly expects 2 args: (column, degree)".into(),
-                        ));
-                    }
-                    let col_name = match &args[0] {
-                        Arg::Term(Term::Var(s)) => s.clone(),
-                        _ => {
-                            return Err(Error::Semantic(
-                                "poly: first arg must be a column name".into(),
-                            ));
-                        }
-                    };
-                    let degree = match args[1] {
-                        Arg::Number(d) => d as usize,
-                        _ => return Err(Error::Semantic("poly: degree must be numeric".into())),
-                    };
-
-                    let base = df
-                        .column(&col_name)
-                        .map_err(|_| Error::Semantic(format!("unknown column '{col_name}'")))?;
-                    let series = base.as_series().unwrap();
-                    let base = cast_to_f64_named(&col_name, series)?;
-                    let mut pow = base.f64().unwrap().clone();
-                    for k in 1..=degree {
-                        if k > 1 {
-                            pow = &pow * base.f64().unwrap();
-                        }
-                        let nm = match &prefix {
-                            Some(p) => format!("{p}:poly({col_name},{degree})^{k}"),
-                            None => format!("poly({col_name},{degree})^{k}"),
-                        };
-                        out.push((nm, pow.clone().into_series()));
-                    }
-                }
-                // constants 0/1 etc.
-                "const" => {
-                    if let [Arg::Number(v)] = args.as_slice() {
-                        // Commonly used to toggle intercept; here we just emit a literal column
-                        let n = df.height();
-                        let s =
-                            Float64Chunked::from_slice("const".into(), &vec![*v; n]).into_series();
-                        let nm = match &prefix {
-                            Some(p) => format!("{p}:{v}"),
-                            None => format!("{v}"),
-                        };
-                        out.push((nm, s));
-                    } else {
-                        return Err(Error::Semantic("const expects one numeric arg".into()));
-                    }
-                }
-                // dot placeholder: not implemented yet
-                "dot" => {
-                    return Err(Error::Semantic(
-                        "'.' expansion not implemented in this starter".into(),
-                    ));
-                }
-                _ => return Err(Error::Semantic(format!("unknown function '{name}'"))),
-            }
-        }
-    }
-    Ok(())
-}
-
-fn prefix_name(prefix: Option<&str>, name: &str) -> String {
-    match prefix {
-        Some(p) => format!("{p}:{name}"),
-        None => name.to_string(),
-    }
-}
-
-fn cast_to_f64_named(name: &str, s: &Series) -> Result<Series, Error> {
-    let s = s
-        .cast(&DataType::Float64)
-        .map_err(|e| Error::Semantic(format!("cast '{name}' to f64 failed: {e}")))?;
-    Ok(s)
-}
-
-#[allow(dead_code)]
 fn cast_to_f64(s: &Series) -> Result<Float64Chunked, Error> {
     let s = s
         .cast(&DataType::Float64)
         .map_err(|e| Error::Semantic(format!("cast to f64 failed: {e}")))?;
     Ok(s.f64().unwrap().clone())
-}
-
-// --- Errors ---------------------------------------------------------------
-
-/// Errors that can occur during formula parsing and materialization.
-///
-/// This enum represents all possible errors that can arise when working with
-/// polars-formula, from parsing syntax errors to data materialization issues.
-///
-/// # Examples
-///
-/// ## Handling Parse Errors
-/// ```rust
-/// use polars_formula::{Formula, Error};
-///
-/// // This will produce a Lex error
-/// match Formula::parse("y ~~ x") {
-///     Err(Error::Lex { pos, msg }) => {
-///         println!("Lexical error at position {}: {}", pos, msg);
-///     }
-///     Err(e) => println!("Other error: {}", e),
-///     Ok(_) => unreachable!(),
-/// }
-/// ```
-///
-/// ## Handling Semantic Errors
-/// ```rust
-/// use polars::prelude::*;
-/// use polars_formula::{Formula, MaterializeOptions, Error};
-///
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let df = df!("x" => [1.0, 2.0, 3.0])?;
-/// let formula = Formula::parse("y ~ x")?; // y doesn't exist
-///
-/// match formula.materialize(&df, MaterializeOptions::default()) {
-///     Err(Error::Semantic(msg)) => {
-///         println!("Data error: {}", msg); // "unknown column 'y'"
-///     }
-///     Err(e) => println!("Other error: {}", e),
-///     Ok(_) => unreachable!(),
-/// }
-/// # Ok(())
-/// # }
-/// ```
-#[derive(Debug, Error)]
-pub enum Error {
-    /// Lexical analysis error during tokenization.
-    ///
-    /// Occurs when the formula string contains invalid characters or
-    /// malformed tokens that cannot be recognized by the lexer.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use polars_formula::{Formula, Error};
-    ///
-    /// // Invalid character in formula
-    /// match Formula::parse("y ~ x$invalid") {
-    ///     Err(Error::Lex { pos, msg }) => {
-    ///         assert_eq!(pos, 5); // Position of '$'
-    ///         assert!(msg.contains("unexpected char"));
-    ///     }
-    ///     _ => panic!("Expected lex error"),
-    /// }
-    /// ```
-    #[error("lex error at {pos}: {msg}")]
-    Lex {
-        /// Character position where the error occurred
-        pos: usize,
-        /// Description of the lexical error
-        msg: String,
-    },
-
-    /// Parse error during syntax analysis.
-    ///
-    /// Occurs when the token sequence doesn't conform to the expected
-    /// formula grammar, even if individual tokens are valid.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use polars_formula::{Formula, Error};
-    ///
-    /// // Incomplete expression
-    /// match Formula::parse("y ~ x +") {
-    ///     Err(Error::Parse { pos, msg }) => {
-    ///         assert!(msg.contains("unexpected end"));
-    ///     }
-    ///     _ => panic!("Expected parse error"),
-    /// }
-    /// ```
-    #[error("parse error at token {pos:?}: {msg}")]
-    Parse {
-        /// Token position where the error occurred (None if at end)
-        pos: Option<usize>,
-        /// Description of the parsing error
-        msg: String,
-    },
-
-    /// Semantic error during formula materialization.
-    ///
-    /// Occurs when the formula is syntactically correct but cannot be
-    /// materialized against the provided data due to missing columns,
-    /// type conversion failures, or other data-related issues.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use polars::prelude::*;
-    /// use polars_formula::{Formula, MaterializeOptions, Error};
-    ///
-    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let df = df!("x" => [1, 2, 3])?; // Note: integers, not floats
-    /// let formula = Formula::parse("missing_column ~ x")?;
-    ///
-    /// match formula.materialize(&df, MaterializeOptions::default()) {
-    ///     Err(Error::Semantic(msg)) => {
-    ///         assert!(msg.contains("unknown column 'missing_column'"));
-    ///     }
-    ///     _ => panic!("Expected semantic error"),
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[error("semantic error: {0}")]
-    Semantic(
-        /// Description of the semantic error
-        String,
-    ),
-}
-
-// --- Display helpers (debugging) -----------------------------------------
-
-impl Display for Term {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Term::Var(s) => write!(f, "{s}"),
-            Term::Func(FuncCall { name, args }) => {
-                let as_ = args
-                    .iter()
-                    .map(|a| match a {
-                        Arg::Term(t) => format!("{t}"),
-                        Arg::Number(v) => v.to_string(),
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                write!(f, "{name}({as_})")
-            }
-            Term::Interaction(ts) => {
-                let s = ts
-                    .iter()
-                    .map(|t| format!("{t}"))
-                    .collect::<Vec<_>>()
-                    .join(":");
-                write!(f, "{s}")
-            }
-            Term::Group(inner) => {
-                let s = inner
-                    .iter()
-                    .map(|t| format!("{t}"))
-                    .collect::<Vec<_>>()
-                    .join(" + ");
-                write!(f, "({s})")
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1794,8 +985,7 @@ mod tests {
         let f = Formula::parse(formula_str).expect("Failed to parse formula");
 
         // Test that parsing succeeds
-        assert!(matches!(f.ast.lhs.len(), 1)); // Should have one LHS term (y)
-        assert!(matches!(f.ast.rhs.len(), 3)); // Should have three RHS terms
+        assert!(matches!(f.spec.formula.lhs, dsl::Response::Var(_)));
     }
 
     #[test]
@@ -1808,7 +998,7 @@ mod tests {
         )
         .expect("Failed to create test DataFrame");
 
-        let formula_str = "y ~ x1 + poly(x2, 2) + x1:x2";
+        let formula_str = "y ~ x1 + x2";
         let f = Formula::parse(formula_str).expect("Failed to parse formula");
 
         // Materialize the formula
@@ -1819,132 +1009,10 @@ mod tests {
         // Test LHS (y)
         assert_eq!(_y.width(), 1);
         assert_eq!(_y.height(), 3);
-        assert_eq!(_y.get_columns()[0].name(), "y");
 
         // Test RHS (X matrix)
-        // Should have: Intercept, x1, poly(x2,2)^1, poly(x2,2)^2, x1:x2
-        assert_eq!(x.width(), 5);
+        assert_eq!(x.width(), 3); // Intercept + x1 + x2
         assert_eq!(x.height(), 3);
-
-        // Check column names (cleaned by default)
-        let expected_columns = vec!["intercept", "x1", "poly_x2_2_1", "poly_x2_2_2", "x1_x2"];
-
-        for (i, expected_name) in expected_columns.iter().enumerate() {
-            assert_eq!(x.get_columns()[i].name(), *expected_name);
-        }
-
-        // Test specific values
-        let intercept_col = x.column("intercept").expect("intercept column not found");
-        assert_eq!(intercept_col.f64().unwrap().get(0), Some(1.0));
-        assert_eq!(intercept_col.f64().unwrap().get(2), Some(1.0));
-
-        let x1_col = x.column("x1").expect("x1 column not found");
-        assert_eq!(x1_col.f64().unwrap().get(0), Some(1.0));
-        assert_eq!(x1_col.f64().unwrap().get(2), Some(3.0));
-
-        let poly1_col = x
-            .column("poly_x2_2_1")
-            .expect("poly_x2_2_1 column not found");
-        assert_eq!(poly1_col.f64().unwrap().get(0), Some(1.0));
-        assert_eq!(poly1_col.f64().unwrap().get(2), Some(3.0));
-
-        let poly2_col = x
-            .column("poly_x2_2_2")
-            .expect("poly_x2_2_2 column not found");
-        assert_eq!(poly2_col.f64().unwrap().get(0), Some(1.0)); // 1.0^2 = 1.0
-        assert_eq!(poly2_col.f64().unwrap().get(2), Some(9.0)); // 3.0^2 = 9.0
-
-        let interaction_col = x.column("x1_x2").expect("x1_x2 column not found");
-        assert_eq!(interaction_col.f64().unwrap().get(0), Some(1.0)); // 1.0 * 1.0 = 1.0
-        assert_eq!(interaction_col.f64().unwrap().get(2), Some(9.0)); // 3.0 * 3.0 = 9.0
-    }
-
-    #[test]
-    fn test_formula_without_intercept() {
-        let df: DataFrame = df!(
-            "y" => [1.0, 2.0, 3.0],
-            "x1" => [1.0, 2.0, 3.0],
-            "x2" => [1.0, 2.0, 3.0]
-        )
-        .expect("Failed to create test DataFrame");
-
-        let formula_str = "y ~ x1 + poly(x2, 2) + x1:x2";
-        let f = Formula::parse(formula_str).expect("Failed to parse formula");
-
-        let opts = MaterializeOptions {
-            rhs_intercept: false,
-            intercept_name: "Intercept",
-            clean_names: false,
-        };
-
-        let (_y, x) = f
-            .materialize(&df, opts)
-            .expect("Failed to materialize formula");
-
-        // Should have 4 columns: x1, poly(x2,2)^1, poly(x2,2)^2, x1:x2 (no intercept)
-        assert_eq!(x.width(), 4);
-
-        // Check that Intercept column is not present
-        assert!(x.column("Intercept").is_err());
-    }
-
-    #[test]
-    #[cfg(feature = "faer")]
-    fn test_faer_conversion() {
-        let df = df!(
-            "y" => [1.0, 2.0, 3.0],
-            "x1" => [1.0, 2.0, 3.0],
-            "x2" => [1.0, 2.0, 3.0]
-        )
-        .expect("Failed to create test DataFrame");
-
-        let formula_str = "y ~ x1 + poly(x2, 2) + x1:x2";
-        let f = Formula::parse(formula_str).expect("Failed to parse formula");
-
-        let (_y, x) = f
-            .materialize(&df, MaterializeOptions::default())
-            .expect("Failed to materialize formula");
-
-        // Convert to faer matrices
-        let x_matrix = polars_to_faer(&x).expect("Failed to convert X to faer matrix");
-        let y_series = _y.get_columns()[0]
-            .as_series()
-            .expect("Failed to get y series");
-        let y_vector = series_to_faer_col(&y_series).expect("Failed to convert y to faer column");
-
-        // Test matrix dimensions
-        assert_eq!(x_matrix.nrows(), 3); // 3 rows
-        assert_eq!(x_matrix.ncols(), 5); // 5 columns (Intercept, x1, poly^1, poly^2, x1:x2)
-        assert_eq!(y_vector.nrows(), 3); // 3 rows
-        assert_eq!(y_vector.ncols(), 1); // 1 column
-
-        // Test some specific values
-        assert_eq!(x_matrix[(0, 0)], 1.0); // Intercept
-        assert_eq!(x_matrix[(0, 1)], 1.0); // x1
-        assert_eq!(x_matrix[(0, 2)], 1.0); // poly(x2,2)^1
-        assert_eq!(x_matrix[(0, 3)], 1.0); // poly(x2,2)^2
-        assert_eq!(x_matrix[(0, 4)], 1.0); // x1:x2
-
-        assert_eq!(y_vector[0], 1.0);
-        assert_eq!(y_vector[1], 2.0);
-        assert_eq!(y_vector[2], 3.0);
-    }
-
-    #[test]
-    fn test_formula_parsing_edge_cases() {
-        // Test valid formula without RHS
-        let f = Formula::parse("y ~").expect("Failed to parse formula with empty RHS");
-        assert_eq!(f.ast.lhs.len(), 1);
-        assert_eq!(f.ast.rhs.len(), 0);
-
-        // Test formula without tilde (RHS only)
-        let f = Formula::parse("x1 + x2").expect("Failed to parse RHS-only formula");
-        assert_eq!(f.ast.lhs.len(), 0);
-        assert_eq!(f.ast.rhs.len(), 2);
-
-        // Test invalid formula
-        assert!(Formula::parse("y ~ x1 +").is_err()); // Incomplete expression
-        assert!(Formula::parse("y ~ poly(x1,)").is_err()); // Incomplete function call
     }
 
     #[test]
@@ -1970,34 +1038,5 @@ mod tests {
         assert_eq!(make_clean_names(""), "column");
         assert_eq!(make_clean_names("___"), "column");
         assert_eq!(make_clean_names("   "), "column");
-    }
-
-    #[test]
-    fn test_formula_with_clean_names() -> Result<(), Box<dyn std::error::Error>> {
-        let df = df!(
-            "y" => [1.0, 2.0, 3.0],
-            "x" => [1.0, 2.0, 3.0]
-        )
-        .expect("Failed to create test DataFrame");
-
-        let formula = Formula::parse("y ~ poly(x,2)")?;
-        let opts = MaterializeOptions {
-            clean_names: true,
-            ..Default::default()
-        };
-        let (_y, x) = formula.materialize(&df, opts)?;
-
-        // Check that names are cleaned
-        let column_names: Vec<&str> = x.get_column_names().iter().map(|s| s.as_str()).collect();
-        assert!(column_names.contains(&"intercept"));
-        assert!(column_names.contains(&"poly_x_2_1"));
-        assert!(column_names.contains(&"poly_x_2_2"));
-
-        // Original names should not be present
-        assert!(!column_names.contains(&"Intercept"));
-        assert!(!column_names.contains(&"poly(x,2)^1"));
-        assert!(!column_names.contains(&"poly(x,2)^2"));
-
-        Ok(())
     }
 }

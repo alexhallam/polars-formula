@@ -24,7 +24,7 @@ use polars::prelude::*;
 ///
 /// ```rust
 /// use polars::prelude::*;
-/// use polars_formula::dsl::{parser::parser, materialize_dsl_spec, MaterializeOptions};
+/// use polars_formula::dsl::{parser::parser, materialize, MaterializeOptions};
 /// use chumsky::Parser;
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -36,7 +36,7 @@ use polars::prelude::*;
 ///
 /// let p = parser();
 /// let spec = p.parse("y ~ x1 + x2")?;
-/// let (y, X, Z) = materialize_dsl_spec(&df, &spec, MaterializeOptions::default())?;
+/// let (y, X, Z) = materialize(&df, &spec, MaterializeOptions::default())?;
 ///
 /// println!("Response: {:?}", y);
 /// println!("Fixed effects: {:?}", X);
@@ -44,7 +44,7 @@ use polars::prelude::*;
 /// # Ok(())
 /// # }
 /// ```
-pub fn materialize_dsl_spec(
+pub fn materialize(
     df: &DataFrame,
     spec: &ModelSpec,
     opts: MaterializeOptions,

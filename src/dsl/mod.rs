@@ -3,8 +3,9 @@
 //! This module provides a comprehensive formula DSL implementation with:
 //! - Rich AST representation
 //! - Chumsky-based parser
-//! - Canonicalization passes
+//! - Canonicalization
 //! - Pretty-printing
+//! - Materialization
 //! - Property-based testing
 
 pub mod ast;
