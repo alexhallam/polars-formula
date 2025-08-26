@@ -11,6 +11,10 @@
   <img src="img/mango_pixel.png" alt="logo" width="120">
 </p>
 
+## In development
+
+This library is in development and is not yet ready for production use.
+
 ## 🚀 Features
 
 - **🔍 Formula Parsing**: Parse formulas like `y ~ x1 + x2 + x1:x2 + poly(x1, 3) - 1`
