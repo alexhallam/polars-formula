@@ -1,11 +1,7 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [0.3.3] - 2025-08-25
+## [0.3.3]
 
 ### Added
 - **Exact R compatibility for `poly()` function**: The orthogonal polynomial computation now produces output that exactly matches R's `model.matrix()` function.
@@ -124,7 +120,7 @@ mm <- model.matrix(formula, df)
 - **Return type**: Changed function to return `Vec<Float64Chunked>` for proper handling of multiple polynomial terms
 - **Degree validation**: Added validation to ensure polynomial degree is less than the number of unique points in the data (matching R's behavior)
 
-## [0.3.2] - 2024-12-19
+## [0.3.2] 
 
 ### Added
 - Initial implementation of `poly()` function for orthogonal polynomials
@@ -138,7 +134,7 @@ mm <- model.matrix(formula, df)
 ### Fixed
 - Various parsing and materialization bugs
 
-## [0.3.1] - 2024-12-18
+## [0.3.1]
 
 ### Added
 - Support for interactions using `:` and `*` operators
@@ -149,7 +145,7 @@ mm <- model.matrix(formula, df)
 - Improved error handling and reporting
 - Enhanced formula parsing capabilities
 
-## [0.3.0] - 2024-12-17
+## [0.3.0]
 
 ### Added
 - Initial release with basic formula parsing
