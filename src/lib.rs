@@ -336,7 +336,9 @@ impl Formula {
         df: &DataFrame,
         opts: MaterializeOptions,
     ) -> Result<(DataFrame, DataFrame), Error> {
-        let (y, x, _z) = dsl::materialize(df, &self.spec, opts)?;
+        // Canonicalize the formula before materialization
+        let canonicalized = dsl::canon::canonicalize(&self.spec);
+        let (y, x, _z) = dsl::materialize(df, &canonicalized, opts)?;
         // For backward compatibility, return (y, x) and ignore random effects for now
         Ok((y, x))
     }
