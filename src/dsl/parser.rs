@@ -9,6 +9,57 @@ pub enum ParseError {
     Generic(String),
 }
 
+/// Create a parser for statistical formula strings.
+///
+/// This function returns a parser that can parse R-style statistical formulas
+/// into a `ModelSpec` structure. The parser supports the full range of formula
+/// syntax including variables, interactions, polynomials, and more.
+///
+/// # Returns
+///
+/// Returns a parser that takes a stream of characters and produces a `ModelSpec`.
+///
+/// # Examples
+///
+/// ## Basic Usage
+/// ```rust
+/// use polars_formula::dsl::parser::parser;
+///
+/// let p = parser();
+/// let result = p.parse("y ~ x1 + x2".chars().collect::<Vec<_>>());
+/// assert!(result.is_ok());
+/// ```
+///
+/// ## Complex Formula
+/// ```rust
+/// use polars_formula::dsl::parser::parser;
+///
+/// let p = parser();
+/// let result = p.parse("mpg ~ wt*hp + poly(disp, 3) + (1|cyl)".chars().collect::<Vec<_>>());
+/// assert!(result.is_ok());
+/// ```
+///
+/// ## Error Handling
+/// ```rust
+/// use polars_formula::dsl::parser::parser;
+///
+/// let p = parser();
+/// let result = p.parse("y ~~ x".chars().collect::<Vec<_>>()); // Invalid syntax
+/// assert!(result.is_err());
+/// ```
+///
+/// # Supported Syntax
+///
+/// - **Variables**: `x`, `income`, `age`
+/// - **Response**: `y ~ ...` (left side of `~`)
+/// - **Predictors**: `x1 + x2` (right side of `~`)
+/// - **Interactions**: `x1:x2` (product terms)
+/// - **Products**: `x1*x2` (expands to main effects + interactions)
+/// - **Polynomials**: `poly(x, degree)`
+/// - **Random Effects**: `(1|group)`, `(x|group)`
+/// - **Smooth Terms**: `s(x)`, `t2(x,z)`, `te(x,y)`
+/// - **Constants**: `1`, `0`
+/// - **Intercept Removal**: `-1`
 pub fn parser() -> impl Parser<char, ModelSpec, Error = Simple<char>> {
     // --- lexeme helpers ---
     let ident = text::ident().map(|s: String| s);

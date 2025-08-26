@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         CsvReader::new(std::fs::File::open("examples/data/mtcars.csv")?).finish()?;
 
     // Original formula
-    let formula_str = "mpg ~ wt + hp + cyl + wt:hp + poly(disp, 2) - 1";
+    let formula_str = "mpg ~ cyl + wt*hp + poly(disp, 4) - 1";
     println!("Original: {}", formula_str);
 
     // Colored version (original syntax preserved)

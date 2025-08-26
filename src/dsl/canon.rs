@@ -1,7 +1,63 @@
 use super::ast::*;
 use std::collections::HashSet;
 
-/// Canonicalize a ModelSpec
+/// Canonicalize a ModelSpec by expanding syntactic sugar and normalizing expressions.
+///
+/// This function transforms a parsed ModelSpec into its canonical form by:
+/// - Expanding product terms (`*`) into main effects and interactions
+/// - Expanding nested terms (`/`) into main effects and interactions  
+/// - Flattening nested sums and interactions
+/// - Normalizing group expressions and function calls
+/// - Hoisting autocorrelation terms
+///
+/// # Arguments
+///
+/// * `spec` - The parsed ModelSpec to canonicalize
+///
+/// # Returns
+///
+/// Returns a new ModelSpec with all expressions in canonical form.
+///
+/// # Examples
+///
+/// ## Expand Product Terms
+/// ```rust
+/// use polars_formula::dsl::{parser::parser, canon::canonicalize};
+///
+/// let p = parser();
+/// let spec = p.parse("y ~ x1*x2".chars().collect::<Vec<_>>()).unwrap();
+/// let canonicalized = canonicalize(&spec);
+///
+/// // x1*x2 expands to x1 + x2 + x1:x2
+/// assert!(canonicalized.formula.rhs.to_string().contains("x1"));
+/// assert!(canonicalized.formula.rhs.to_string().contains("x2"));
+/// assert!(canonicalized.formula.rhs.to_string().contains("x1:x2"));
+/// ```
+///
+/// ## Expand Nested Terms
+/// ```rust
+/// use polars_formula::dsl::{parser::parser, canon::canonicalize};
+///
+/// let p = parser();
+/// let spec = p.parse("y ~ x1/x2".chars().collect::<Vec<_>>()).unwrap();
+/// let canonicalized = canonicalize(&spec);
+///
+/// // x1/x2 expands to x1 + x1:x2
+/// assert!(canonicalized.formula.rhs.to_string().contains("x1"));
+/// assert!(canonicalized.formula.rhs.to_string().contains("x1:x2"));
+/// ```
+///
+/// ## Complex Formula
+/// ```rust
+/// use polars_formula::dsl::{parser::parser, canon::canonicalize};
+///
+/// let p = parser();
+/// let spec = p.parse("y ~ (x1 + x2)*z + poly(w, 3)".chars().collect::<Vec<_>>()).unwrap();
+/// let canonicalized = canonicalize(&spec);
+///
+/// // Expands to: x1 + x2 + z + x1:z + x2:z + poly(w, 3)
+/// // All product terms are expanded into main effects and interactions
+/// ```
 pub fn canonicalize(spec: &ModelSpec) -> ModelSpec {
     let mut canonicalized = spec.clone();
 
@@ -24,7 +80,84 @@ pub fn canonicalize(spec: &ModelSpec) -> ModelSpec {
     canonicalized
 }
 
-/// Canonicalize an expression
+/// Canonicalize a single expression by expanding syntactic sugar and normalizing structure.
+///
+/// This function transforms an expression into its canonical form by:
+/// - Expanding product terms (`*`) into main effects and interactions
+/// - Expanding nested terms (`/`) into main effects and interactions
+/// - Flattening nested sums and interactions
+/// - Normalizing group expressions and function calls
+///
+/// # Arguments
+///
+/// * `expr` - The expression to canonicalize
+///
+/// # Returns
+///
+/// Returns a new expression in canonical form.
+///
+/// # Examples
+///
+/// ## Expand Product Expression
+/// ```rust
+/// use polars_formula::dsl::{ast::Expr, canon::canonicalize_expr};
+///
+/// let prod_expr = Expr::Prod(vec![
+///     Expr::Var("x1".to_string()),
+///     Expr::Var("x2".to_string())
+/// ]);
+/// let canonicalized = canonicalize_expr(prod_expr);
+///
+/// // x1*x2 expands to x1 + x2 + x1:x2
+/// match canonicalized {
+///     Expr::Sum(terms) => {
+///         assert_eq!(terms.len(), 3); // x1, x2, x1:x2
+///     }
+///     _ => panic!("Expected Sum expression")
+/// }
+/// ```
+///
+/// ## Expand Nested Expression
+/// ```rust
+/// use polars_formula::dsl::{ast::{Expr, NestKind}, canon::canonicalize_expr};
+///
+/// let nested_expr = Expr::Nest {
+///     outer: Box::new(Expr::Var("x1".to_string())),
+///     inner: Box::new(Expr::Var("x2".to_string())),
+///     kind: NestKind::Slash,
+/// };
+/// let canonicalized = canonicalize_expr(nested_expr);
+///
+/// // x1/x2 expands to x1 + x1:x2
+/// match canonicalized {
+///     Expr::Sum(terms) => {
+///         assert_eq!(terms.len(), 2); // x1, x1:x2
+///     }
+///     _ => panic!("Expected Sum expression")
+/// }
+/// ```
+///
+/// ## Flatten Nested Sums
+/// ```rust
+/// use polars_formula::dsl::{ast::Expr, canon::canonicalize_expr};
+///
+/// let nested_sum = Expr::Sum(vec![
+///     Expr::Var("x1".to_string()),
+///     Expr::Sum(vec![
+///         Expr::Var("x2".to_string()),
+///         Expr::Var("x3".to_string())
+///     ])
+/// ]);
+/// let canonicalized = canonicalize_expr(nested_sum);
+///
+/// // Flattens to x1 + x2 + x3
+/// match canonicalized {
+///     Expr::Sum(terms) => {
+///         assert_eq!(terms.len(), 3);
+///     }
+///     _ => panic!("Expected Sum expression")
+/// }
+/// ```
 pub fn canonicalize_expr(expr: Expr) -> Expr {
     match expr {
         // Expand * sugar: a*b -> a + b + a:b

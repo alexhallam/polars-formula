@@ -25,7 +25,6 @@ use polars::prelude::*;
 /// ```rust
 /// use polars::prelude::*;
 /// use polars_formula::dsl::{parser::parser, materialize, MaterializeOptions};
-/// use chumsky::Parser;
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let df = df!(

@@ -1,5 +1,50 @@
 use super::ast::*;
 
+/// Pretty-print a ModelSpec as a formula string.
+///
+/// This function converts a `ModelSpec` back into a human-readable formula string.
+/// It handles all the components of a statistical formula including the main formula,
+/// distributional parameters, and autocorrelation terms.
+///
+/// # Arguments
+///
+/// * `spec` - The ModelSpec to pretty-print
+///
+/// # Returns
+///
+/// Returns a string representation of the formula.
+///
+/// # Examples
+///
+/// ## Basic Formula
+/// ```rust
+/// use polars_formula::dsl::{parser::parser, pretty::pretty};
+///
+/// let p = parser();
+/// let spec = p.parse("y ~ x1 + x2".chars().collect::<Vec<_>>()).unwrap();
+/// let formula_str = pretty(&spec);
+/// assert_eq!(formula_str, "y ~ x1 + x2");
+/// ```
+///
+/// ## Complex Formula with Interactions
+/// ```rust
+/// use polars_formula::dsl::{parser::parser, pretty::pretty};
+///
+/// let p = parser();
+/// let spec = p.parse("mpg ~ wt*hp + poly(disp, 3)".chars().collect::<Vec<_>>()).unwrap();
+/// let formula_str = pretty(&spec);
+/// // Output will show the expanded form: mpg ~ wt + hp + wt:hp + poly(disp, 3)
+/// ```
+///
+/// ## Formula with Random Effects
+/// ```rust
+/// use polars_formula::dsl::{parser::parser, pretty::pretty};
+///
+/// let p = parser();
+/// let spec = p.parse("y ~ x + (1|group)".chars().collect::<Vec<_>>()).unwrap();
+/// let formula_str = pretty(&spec);
+/// assert!(formula_str.contains("(1|group)"));
+/// ```
 pub fn pretty(spec: &ModelSpec) -> String {
     let mut parts = Vec::new();
 
@@ -173,6 +218,93 @@ fn pretty_aterm(aterm: &Aterm) -> String {
     }
 }
 
+/// Pretty-print a single expression as a string.
+///
+/// This function converts an `Expr` back into a human-readable string representation.
+/// It handles all types of expressions including variables, sums, products, interactions,
+/// functions, and more.
+///
+/// # Arguments
+///
+/// * `expr` - The expression to pretty-print
+///
+/// # Returns
+///
+/// Returns a string representation of the expression.
+///
+/// # Examples
+///
+/// ## Basic Expressions
+/// ```rust
+/// use polars_formula::dsl::{ast::Expr, pretty::pretty_expr};
+///
+/// let var_expr = Expr::Var("x1".to_string());
+/// assert_eq!(pretty_expr(&var_expr), "x1");
+///
+/// let num_expr = Expr::Num(42.0);
+/// assert_eq!(pretty_expr(&num_expr), "42");
+/// ```
+///
+/// ## Sum Expressions
+/// ```rust
+/// use polars_formula::dsl::{ast::Expr, pretty::pretty_expr};
+///
+/// let sum_expr = Expr::Sum(vec![
+///     Expr::Var("x1".to_string()),
+///     Expr::Var("x2".to_string()),
+///     Expr::Var("x3".to_string())
+/// ]);
+/// assert_eq!(pretty_expr(&sum_expr), "x1 + x2 + x3");
+/// ```
+///
+/// ## Product Expressions
+/// ```rust
+/// use polars_formula::dsl::{ast::Expr, pretty::pretty_expr};
+///
+/// let prod_expr = Expr::Prod(vec![
+///     Expr::Var("x1".to_string()),
+///     Expr::Var("x2".to_string())
+/// ]);
+/// assert_eq!(pretty_expr(&prod_expr), "x1 * x2");
+/// ```
+///
+/// ## Interaction Expressions
+/// ```rust
+/// use polars_formula::dsl::{ast::Expr, pretty::pretty_expr};
+///
+/// let interaction_expr = Expr::Interaction(vec![
+///     Expr::Var("x1".to_string()),
+///     Expr::Var("x2".to_string())
+/// ]);
+/// assert_eq!(pretty_expr(&interaction_expr), "x1:x2");
+/// ```
+///
+/// ## Function Calls
+/// ```rust
+/// use polars_formula::dsl::{ast::Expr, pretty::pretty_expr};
+///
+/// let func_expr = Expr::Func {
+///     name: "poly".to_string(),
+///     args: vec![
+///         Expr::Var("x".to_string()),
+///         Expr::Num(3.0)
+///     ]
+/// };
+/// assert_eq!(pretty_expr(&func_expr), "poly(x, 3)");
+/// ```
+///
+/// ## Group Expressions
+/// ```rust
+/// use polars_formula::dsl::{ast::{Expr, GroupKind, GroupSpec}, pretty::pretty_expr};
+///
+/// let group_expr = Expr::Group {
+///     inner: Box::new(Expr::Var("x".to_string())),
+///     spec: GroupSpec::Expr(super::ast::GroupExpr(vec![("group".to_string(), None)])),
+///     kind: GroupKind::Correlated,
+///     id: None,
+/// };
+/// assert_eq!(pretty_expr(&group_expr), "(x|group)");
+/// ```
 pub fn pretty_expr(expr: &Expr) -> String {
     match expr {
         Expr::Num(n) => n.to_string(),
