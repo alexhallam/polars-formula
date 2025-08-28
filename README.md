@@ -74,6 +74,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+<p align="center">
+  <img src="img/output.png" alt="output" width="100">
+</p>
+
 ## 📚 Examples
 
 Run the examples to see the library in action:
