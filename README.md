@@ -43,71 +43,34 @@ polars-formula = { version = "0.1", features = ["faer"] }
 
 ## 🏃‍♂️ Quick Start
 
-### Basic Formula Parsing
+### Basic Formula Parsing, coloring, and materialization
 
 ```rust
-use polars::prelude::*;
-use polars_formula::dsl::{parser::parser, materialize::materialize_dsl_spec};
-use chumsky::Parser;
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create sample data
-    let df = df!(
-        "y" => [1.0, 2.0, 3.0, 4.0, 5.0],
-        "x1" => [1.0, 2.0, 3.0, 4.0, 5.0],
-        "x2" => [2.0, 3.0, 4.0, 5.0, 6.0]
-    )?;
+    // Simple dataset
+    let df: DataFrame =
+        CsvReader::new(std::fs::File::open("examples/data/mtcars.csv")?).finish()?;
 
-    // Parse a formula
-    let p = parser();
-    let spec = p.parse("y ~ x1 + x2")?;
+    // Original formula
+    let formula_str = "mpg ~ cyl + wt*hp + poly(disp, 4) - 1";
+    println!("Original: {}", formula_str);
 
-    // Materialize into design matrices
-    let (y, X, Z) = materialize_dsl_spec(&df, &spec, MaterializeOptions::default())?;
+    // Colored version (original syntax preserved)
+    let color_pretty = Color::default();
+    println!("Colored:  {}", color_pretty.formula(formula_str));
 
-    println!("Response: {} columns", y.width());
-    println!("Fixed effects: {} columns", X.width());
-    println!("Random effects: {} columns", Z.width());
+    // Canonicalized version (for comparison)
+    println!("Canonicalized: {}", color_pretty.formula(formula_str));
+
+    // Materialize the formula
+    let formula = Formula::parse(formula_str)?;
+    let (y, x) = formula.materialize(&df, MaterializeOptions::default())?;
+
+    // Print the results
+    println!("y: {}", y);
+    println!("X: {}", x);
 
     Ok(())
-}
-```
-
-### Advanced Formula Features
-
-```rust
-use polars_formula::dsl::{parser::parser, canon::canonicalize, pretty::pretty};
-use chumsky::Parser;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let p = parser();
-    
-    // Complex formula with interactions and polynomials
-    let spec = p.parse("y ~ x1 * x2 + poly(x1, 2) + (1|group)")?;
-    
-    // Canonicalize (expand interactions)
-    let canonicalized = canonicalize(&spec);
-    let canonical_str = pretty(&canonicalized);
-    
-    println!("Original: y ~ x1 * x2 + poly(x1, 2) + (1|group)");
-    println!("Canonicalized: {}", canonical_str);
-    // Output: y ~ x1 + x2 + x1:x2 + poly(x1,2)^1 + poly(x1,2)^2 + (1|group)
-
-    Ok(())
-}
-```
-
-### Colored Formula Output
-
-```rust
-use polars_formula::SimpleColoredPretty;
-
-fn main() {
-    let color_pretty = SimpleColoredPretty::default();
-    
-    let formula = "y ~ x1 + x2 + x1:x2 + poly(x1, 2)";
-    println!("{}", color_pretty.formula_original(formula));
-    // Outputs beautifully colored formula with syntax highlighting
 }
 ```
 
