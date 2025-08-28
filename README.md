@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 <p align="center">
-  <img src="img/output.png" alt="output" width="100">
+  <img src="img/output.png" alt="output">
 </p>
 
 ## 📚 Examples
