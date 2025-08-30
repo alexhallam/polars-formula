@@ -1009,15 +1009,6 @@ pub fn make_clean_names(name: &str) -> String {
     result
 }
 
-// --- Internal helper functions --------------------------------------------
-
-fn cast_to_f64(s: &Series) -> Result<Float64Chunked, Error> {
-    let s = s
-        .cast(&DataType::Float64)
-        .map_err(|e| Error::Semantic(format!("cast to f64 failed: {e}")))?;
-    Ok(s.f64().unwrap().clone())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

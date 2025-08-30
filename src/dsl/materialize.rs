@@ -277,9 +277,14 @@ fn materialize_expr(df: &DataFrame, expr: &Expr) -> Result<Series, Error> {
                 .ok_or_else(|| Error::Semantic("Failed to convert column to series".into()))?
                 .clone();
 
-            // For now, just return the original series
-            // TODO: Implement categorical contrasts
-            Ok(series)
+            // Check if this is a categorical variable (string type)
+            if let Ok(str_series) = series.str() {
+                // Convert categorical variable to treatment contrasts
+                materialize_categorical_to_contrasts(str_series, name)
+            } else {
+                // Numeric variable, return as-is
+                Ok(series)
+            }
         }
         Expr::Num(n) => {
             let n_rows = df.height();
@@ -443,33 +448,63 @@ fn materialize_expr_to_columns_with_random(
             Ok((Vec::new(), random_cols))
         }
         Expr::Interaction(terms) => {
-            // For interactions, create a product of the terms
+            // For interactions, handle categorical variables properly
             if terms.is_empty() {
                 return Ok((Vec::new(), Vec::new()));
             }
 
-            // Materialize each term to get individual series
-            let mut term_series = Vec::new();
+            // Materialize each term to get columns (may be multiple for categorical)
+            let mut term_columns = Vec::new();
             for term in terms {
-                let series = materialize_expr(df, term)?;
-                term_series.push(series);
+                let (fixed_cols, _) = materialize_expr_to_columns_with_random(df, term)?;
+                term_columns.push(fixed_cols);
             }
 
-            // Multiply all terms together to create the interaction
-            let mut result = term_series.remove(0);
-            for series in term_series {
-                result = (&result * &series).map_err(|e| {
-                    Error::Semantic(format!("Failed to multiply interaction terms: {}", e))
-                })?;
+            // Create interactions between all combinations
+            let mut interaction_cols = Vec::new();
+
+            if term_columns.len() == 2 {
+                // Binary interaction - most common case
+                let (cols1, cols2) = (&term_columns[0], &term_columns[1]);
+
+                for (name1, series1) in cols1 {
+                    for (name2, series2) in cols2 {
+                        let interaction_name = format!("{}_x_{}", name1, name2);
+                        let interaction_series = (&series1 * &series2).map_err(|e| {
+                            Error::Semantic(format!("Failed to multiply interaction terms: {}", e))
+                        })?;
+                        interaction_cols.push((interaction_name, interaction_series));
+                    }
+                }
+            } else {
+                // Multi-way interaction - for now, just multiply the first columns
+                let mut result_series = None;
+                let mut interaction_name = String::new();
+
+                for (i, cols) in term_columns.iter().enumerate() {
+                    if let Some((name, series)) = cols.first() {
+                        if result_series.is_none() {
+                            result_series = Some(series.clone());
+                            interaction_name = name.clone();
+                        } else {
+                            let current = result_series.as_mut().unwrap();
+                            *current = (&*current * series).map_err(|e| {
+                                Error::Semantic(format!(
+                                    "Failed to multiply interaction terms: {}",
+                                    e
+                                ))
+                            })?;
+                            interaction_name = format!("{}_x_{}", interaction_name, name);
+                        }
+                    }
+                }
+
+                if let Some(series) = result_series {
+                    interaction_cols.push((interaction_name, series));
+                }
             }
 
-            // Create interaction column name
-            let interaction_name = match terms.as_slice() {
-                [Expr::Var(name1), Expr::Var(name2)] => format!("{}_x_{}", name1, name2),
-                _ => "interaction".to_string(),
-            };
-
-            Ok((vec![(interaction_name, result)], Vec::new()))
+            Ok((interaction_cols, Vec::new()))
         }
         Expr::Prod(terms) => {
             // For products, expand into main effects and interactions
@@ -1032,4 +1067,64 @@ fn materialize_group_to_columns(
             Ok(Vec::new())
         }
     }
+}
+
+/// Convert a categorical variable to treatment contrasts.
+///
+/// This function takes a string series representing a categorical variable
+/// and converts it to treatment contrasts (dummy variables) where the first
+/// level is the reference level.
+///
+/// # Arguments
+///
+/// * `str_series` - The string series representing the categorical variable
+/// * `var_name` - The name of the variable
+///
+/// # Returns
+///
+/// Returns a Series with the first contrast (second level vs first level).
+/// For now, we return just the first contrast to avoid complexity in interactions.
+///
+/// # Examples
+///
+/// For a variable with levels ["A", "B", "C"], this creates a contrast
+/// where B=1, A=0, C=0 (B vs A contrast).
+fn materialize_categorical_to_contrasts(
+    str_series: &StringChunked,
+    var_name: &str,
+) -> Result<Series, Error> {
+    // Get unique levels
+    let unique_levels: Vec<String> = str_series
+        .into_iter()
+        .filter_map(|x| x.map(|s| s.to_string()))
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if unique_levels.len() < 2 {
+        return Err(Error::Semantic(format!(
+            "Categorical variable '{}' must have at least 2 levels, found {}",
+            var_name,
+            unique_levels.len()
+        )));
+    }
+
+    // Sort levels to ensure consistent ordering
+    let mut sorted_levels = unique_levels;
+    sorted_levels.sort();
+
+    // Create treatment contrast: second level vs first level
+    let reference_level = &sorted_levels[0];
+    let contrast_level = &sorted_levels[1];
+
+    let contrast_data: Vec<f64> = str_series
+        .into_iter()
+        .map(|x| match x {
+            Some(level) if level == contrast_level => 1.0,
+            _ => 0.0,
+        })
+        .collect();
+
+    let contrast_name = format!("{}_{}_vs_{}", var_name, contrast_level, reference_level);
+    Ok(Float64Chunked::from_slice(contrast_name.into(), &contrast_data).into_series())
 }
