@@ -1009,6 +1009,131 @@ pub fn make_clean_names(name: &str) -> String {
     result
 }
 
+// --- Top-level API Functions -------------------------------------------------------
+
+/// Parse and canonicalize a formula string into a ModelSpec.
+///
+/// This function takes a formula string, parses it, and returns the canonicalized
+/// ModelSpec. This is the primary entry point for formula processing.
+///
+/// # Arguments
+///
+/// * `formula` - A formula string to parse (e.g., `"y ~ x1 + x2"`)
+///
+/// # Returns
+///
+/// Returns a `Result<ModelSpec, Error>` containing the parsed and canonicalized
+/// formula or an error if the formula syntax is invalid.
+///
+/// # Examples
+///
+/// ```rust
+/// use polars_formula::canonicalize;
+///
+/// let spec = canonicalize("y ~ x1 + x2")?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn canonicalize(formula: &str) -> Result<dsl::ModelSpec, Error> {
+    let model_spec = dsl::parser::parser()
+        .parse(formula.chars().collect::<Vec<_>>())
+        .map_err(|e| Error::Parse {
+            pos: None,
+            msg: format!("Parse error: {:?}", e),
+        })?;
+
+    Ok(dsl::canon::canonicalize(&model_spec))
+}
+
+/// Materialize a ModelSpec against a DataFrame to produce design matrices.
+///
+/// This function takes a ModelSpec and materializes it into concrete numeric
+/// matrices suitable for statistical modeling.
+///
+/// # Arguments
+///
+/// * `spec` - The ModelSpec to materialize
+/// * `df` - The DataFrame containing the data to materialize against
+///
+/// # Returns
+///
+/// Returns `Result<(DataFrame, DataFrame, DataFrame), Error>` where:
+/// - First DataFrame: The response variable(s) (y)
+/// - Second DataFrame: The fixed effects design matrix (X)
+/// - Third DataFrame: The random effects design matrix (Z)
+///
+/// # Examples
+///
+/// ```rust
+/// use polars::prelude::*;
+/// use polars_formula::{canonicalize, materialize};
+///
+/// let df = df!(
+///     "y" => [1.0, 2.0, 3.0],
+///     "x" => [1.0, 2.0, 3.0]
+/// )?;
+///
+/// let spec = canonicalize("y ~ x")?;
+/// let (y, x, z) = materialize(&spec, &df)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn materialize(
+    spec: &dsl::ModelSpec,
+    df: &DataFrame,
+) -> Result<(DataFrame, DataFrame, DataFrame), Error> {
+    dsl::materialize::materialize(df, spec, MaterializeOptions::default())
+}
+
+/// Print the canonical formula with syntax highlighting.
+///
+/// This function takes a ModelSpec and prints its canonical form with
+/// colored syntax highlighting for better readability.
+///
+/// # Arguments
+///
+/// * `spec` - The ModelSpec to print
+///
+/// # Examples
+///
+/// ```rust
+/// use polars_formula::{canonicalize, print_formula};
+///
+/// let spec = canonicalize("y ~ x1 * x2")?;
+/// print_formula(&spec);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn print_formula(spec: &dsl::ModelSpec) {
+    let canonicalized_str = dsl::pretty::pretty(spec);
+    let color_pretty = Color::default();
+    println!("{}", color_pretty.formula(&canonicalized_str));
+}
+
+/// Pretty print the full ModelSpec structure.
+///
+/// This function takes a ModelSpec and prints its complete structure
+/// in a human-readable format.
+///
+/// # Arguments
+///
+/// * `spec` - The ModelSpec to print
+///
+/// # Examples
+///
+/// ```rust
+/// use polars_formula::{canonicalize, print_modelspec};
+///
+/// let spec = canonicalize("y ~ x1 + x2")?;
+/// print_modelspec(&spec);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn print_modelspec(spec: &dsl::ModelSpec) {
+    println!("ModelSpec:");
+    println!("  Family: {:?}", spec.family);
+    println!("  Link: {:?}", spec.link);
+    println!("  Formula: {}", dsl::pretty::pretty(spec));
+    println!("  Distributional Parameters: {:?}", spec.dpars);
+    println!("  Autocorrelation: {:?}", spec.autocor);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
