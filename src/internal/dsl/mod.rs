@@ -15,7 +15,3 @@ pub mod parser;
 pub mod pretty;
 
 pub use ast::*;
-pub use canon::*;
-pub use materialize::*;
-pub use parser::*;
-pub use pretty::*;

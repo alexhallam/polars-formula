@@ -1,5 +1,5 @@
 use super::ast::*;
-use crate::{Error, MaterializeOptions};
+use crate::Error;
 use polars::prelude::*;
 
 /// Materialize a DSL ModelSpec against a DataFrame to produce design matrices.

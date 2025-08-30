@@ -1,9 +1,5 @@
-use chumsky::Parser;
-use polars::prelude::*; // DataFrame andCsvReader
-use polars_formula::dsl::canon::canonicalize;
-use polars_formula::dsl::parser::parser;
-use polars_formula::dsl::pretty::pretty;
-use polars_formula::{Color, Formula, MaterializeOptions};
+use polars::prelude::*;
+use polars_formula::{canonicalize, materialize, print_formula, print_modelspec};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // print working that this is still in development
@@ -16,31 +12,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let formula_str: &'static str =
         "incidence | trials(size) ~ period + (1|herd), family = binomial()";
 
-    // Colored print
-    let color_pretty = Color::default();
-    println!("Original:  {}", color_pretty.formula(formula_str));
+    // Step 1: Parse and canonicalize
+    println!("Original:  {}", formula_str);
+    let spec = canonicalize(formula_str)?;
+    
+    // Step 2: Print canonical formula with colors
+    println!("Canonicalized:");
+    print_formula(&spec);
+    
+    // Step 3: Print full model spec
+    println!("\nFull model specification:");
+    print_modelspec(&spec);
 
-    // Parse and canonicalize the formula
-    let model_spec = parser()
-        .parse(formula_str.chars().collect::<Vec<_>>())
-        .map_err(|e| format!("Parse error: {:?}", e))?;
-    let canonicalized = canonicalize(&model_spec);
-    let canonicalized_str = pretty(&canonicalized);
-    println!(
-        "Canonicalized: {}",
-        color_pretty.formula(&canonicalized_str)
-    );
-
-    // Parse the formula
-    let formula: Formula = Formula::parse(formula_str)?;
-    let (y, x) = formula.materialize(&df, MaterializeOptions::default())?;
-
-    // Print spec
-    //println!("Spec: {}", pretty(&formula.spec));
+    // Step 4: Materialize the formula
+    let (y, x, z) = materialize(&spec, &df)?;
 
     // Print the results
+    println!("\nResults:");
     println!("y: {}", y);
     println!("X: {}", x);
+    println!("Z: {}", z);
 
     Ok(())
 }

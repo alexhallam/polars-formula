@@ -1,5 +1,25 @@
 use std::collections::HashMap;
 
+#[derive(Debug, Clone)]
+pub struct MaterializeOptions {
+    /// Whether to include an intercept term in the design matrix.
+    pub rhs_intercept: bool,
+    /// Name to use for the intercept column when `rhs_intercept` is `true`.
+    pub intercept_name: &'static str,
+    /// Whether to clean column names using `make_clean_names()`.
+    pub clean_names: bool,
+}
+
+impl Default for MaterializeOptions {
+    fn default() -> Self {
+        Self {
+            rhs_intercept: true,
+            intercept_name: "intercept",
+            clean_names: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModelSpec {
     pub family: Option<Family>,
