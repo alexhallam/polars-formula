@@ -1,13 +1,13 @@
 [package]
 name = "polars-formula"
-version = "0.3.6"
+version = "0.3.7"
 edition = "2021"
 authors = ["Alex H <alexhallam6.28@gmail.com>"]
 license = "MIT"
 description = "High-performance formula parsing and materialization library for Polars DataFrames with R/Formulaic/Patsy style syntax"
 readme = "README.md"
-homepage = "https://github.com/alexh/polars-formula"
-repository = "https://github.com/alexh/polars-formula"
+homepage = "https://github.com/alexhallam/polars-formula"
+repository = "https://github.com/alexhallam/polars-formula"
 documentation = "https://docs.rs/polars-formula"
 keywords = ["polars", "formula", "statistics", "regression", "dataframe"]
 categories = ["science", "data-structures"]
