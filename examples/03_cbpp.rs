@@ -15,11 +15,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 1: Parse and canonicalize
     println!("Original:  {}", formula_str);
     let spec = canonicalize(formula_str)?;
-    
+
     // Step 2: Print canonical formula with colors
     println!("Canonicalized:");
     print_formula(&spec);
-    
+
     // Step 3: Print full model spec
     println!("\nFull model specification:");
     print_modelspec(&spec);
