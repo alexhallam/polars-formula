@@ -361,6 +361,63 @@ fn canonicalize_group_expr(
 
             Expr::Sum(vec![random_intercept, random_slope])
         }
+        // If inner is a sum expression, check if it contains both intercept and variables
+        Expr::Sum(terms) => {
+            let mut has_intercept = false;
+            let mut variables = Vec::new();
+            
+            for term in &terms {
+                match term {
+                    Expr::Intercept(true) => has_intercept = true,
+                    Expr::Var(var_name) => variables.push(var_name.clone()),
+                    _ => {
+                        // For other terms, just keep them as part of the group
+                        return Expr::Group {
+                            inner: Box::new(Expr::Sum(terms)),
+                            spec: canonicalized_spec,
+                            kind,
+                            id,
+                        };
+                    }
+                }
+            }
+            
+            // If we have both intercept and variables, expand to separate groups
+            if has_intercept && !variables.is_empty() {
+                let mut result = Vec::new();
+                
+                // Add random intercept group
+                result.push(Expr::Group {
+                    inner: Box::new(Expr::Intercept(true)),
+                    spec: canonicalized_spec.clone(),
+                    kind: kind.clone(),
+                    id: id.clone(),
+                });
+                
+                // Add random slope groups for each variable
+                for var_name in variables {
+                    result.push(Expr::Group {
+                        inner: Box::new(Expr::Sum(vec![
+                            Expr::Intercept(false), // 0 +
+                            Expr::Var(var_name),
+                        ])),
+                        spec: canonicalized_spec.clone(),
+                        kind: kind.clone(),
+                        id: id.clone(),
+                    });
+                }
+                
+                Expr::Sum(result)
+            } else {
+                // Otherwise, keep as a single group
+                Expr::Group {
+                    inner: Box::new(Expr::Sum(terms)),
+                    spec: canonicalized_spec,
+                    kind,
+                    id,
+                }
+            }
+        }
         // For other expressions, canonicalize and keep as group
         other => Expr::Group {
             inner: Box::new(other),

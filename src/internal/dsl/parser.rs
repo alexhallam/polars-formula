@@ -187,10 +187,40 @@ pub fn parser() -> impl Parser<char, ModelSpec, Error = Simple<char>> {
             )
             .map(|(name, args)| GroupSpec::Func { name, args }));
 
+        // Group inner expressions can include sums, but need to be parsed carefully
+        // to avoid conflicts with the | character
         let group_inner = choice((
             just('0').to(Expr::Intercept(false)),
             just('1').to(Expr::Intercept(true)),
         ))
+        .or(ident.clone().map(Expr::Var))
+        .or(just('(').ignore_then(expr.clone()).then_ignore(just(')')))
+        .then(
+            (one_of("+-").padded().then(choice((
+                just('0').to(Expr::Intercept(false)),
+                just('1').to(Expr::Intercept(true)),
+                ident.clone().map(Expr::Var),
+                just('(').ignore_then(expr.clone()).then_ignore(just(')')),
+            ))))
+            .repeated(),
+        )
+        .map(|(head, tail)| {
+            if tail.is_empty() {
+                return head;
+            }
+            let mut xs = vec![head];
+            for (op, term) in tail {
+                if op == '-' {
+                    xs.push(Expr::Func {
+                        name: "NEG".into(),
+                        args: vec![term],
+                    });
+                } else {
+                    xs.push(term);
+                }
+            }
+            Expr::Sum(xs)
+        })
         .or(expr.clone());
 
         let group_term = choice((

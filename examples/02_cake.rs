@@ -1,5 +1,5 @@
-use polars::prelude::*; // DataFrame andCsvReader
-use polars_formula::{Color, Formula, MaterializeOptions};
+use polars::prelude::*;
+use polars_formula::{canonicalize, materialize, print_formula, print_modelspec};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Simple dataset
@@ -9,20 +9,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let formula_str = "angle ~ recipe * temperature + (1 | recipe:replicate)";
     println!("Original: {}", formula_str);
 
-    // Colored version (original syntax preserved)
-    let color_pretty = Color::default();
-    println!("Colored:  {}", color_pretty.formula(formula_str));
+    // Step 1: Parse and canonicalize
+    let spec = canonicalize(formula_str)?;
 
-    // Canonicalized version (for comparison)
-    println!("Canonicalized: {}", color_pretty.formula(formula_str));
+    // Step 2: Print canonical formula with colors
+    println!("Canonicalized:");
+    print_formula(&spec);
 
-    // Materialize the formula
-    let formula = Formula::parse(formula_str)?;
-    let (y, x) = formula.materialize(&df, MaterializeOptions::default())?;
+    // Step 3: Print full model spec
+    println!("\nFull model specification:");
+    print_modelspec(&spec);
+
+    // Step 4: Materialize the formula
+    let (y, x, z) = materialize(&spec, &df)?;
 
     // Print the results
+    println!("\nResults:");
     println!("y: {}", y);
     println!("X: {}", x);
+    println!("Z: {}", z);
 
     Ok(())
 }

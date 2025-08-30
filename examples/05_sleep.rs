@@ -1,10 +1,8 @@
-use chumsky::Parser;
 use polars::prelude::*;
-use polars_formula::dsl::{canon::*, materialize::materialize, parser::parser, pretty::*};
-use polars_formula::{MaterializeOptions, Color};
+use polars_formula::{canonicalize, materialize, print_formula, print_modelspec};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Sleep Study DSL Demo ===\n");
+    println!("=== Sleep Study Demo ===\n");
 
     // Load the sleep study data
     println!("1. Loading sleep_study.csv data...");
@@ -41,136 +39,65 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
 
-    // Define the formula to parse
-    let formula_str = "Reaction ~ Days + (Days | Subject)";
-    let color_pretty = Color::default();
-    println!(
-        "2. Parsing formula: {}",
-        color_pretty.formula(formula_str)
-    );
+    // Define the formula to parse - testing both syntaxes
+    let formula_str = "Reaction ~ 1 + Days + (1 + Days|Subject)";
+    println!("2. Original formula: {}", formula_str);
 
-    // Parse the formula using the new DSL parser
-    let p = parser();
-    let parse_result = p.parse(formula_str.chars().collect::<Vec<_>>());
+    // Canonicalize the formula
+    println!("3. Canonicalizing formula...");
+    let spec = canonicalize(formula_str)?;
+    println!("   Canonicalized:");
+    print_formula(&spec);
 
-    match parse_result {
-        Ok(spec) => {
-            println!("   ✅ Formula parsed successfully!");
-            println!("   Parsed AST structure:");
-            println!("   - Family: {:?}", spec.family);
-            println!("   - Link: {:?}", spec.link);
-            println!("   - Response: {:?}", spec.formula.lhs);
-            println!("   - Predictors: {:?}", spec.formula.rhs);
-            println!("   - Aterms: {:?}", spec.formula.aterms);
-            println!("   - Dpars: {:?}", spec.dpars);
-            println!("   - Autocor: {:?}", spec.autocor);
-            println!();
+    // Print full model specification
+    println!("4. Full model specification:");
+    print_modelspec(&spec);
 
-            // Pretty print the parsed formula
-            println!("3. Pretty-printed formula:");
-            let pretty_output = pretty(&spec);
-            println!("   {}", color_pretty.formula(&pretty_output));
-            println!();
+    // Materialize the formula
+    println!("5. Materializing formula...");
+    let (y, x, z) = materialize(&spec, &df)?;
+    println!("   ✅ Materialization successful!");
+    println!("   Response variable (y):");
+    println!("     - Shape: {} rows × {} columns", y.height(), y.width());
+    println!("     - Column names: {:?}", y.get_column_names());
+    println!("     - First 5 rows:");
+    println!("{}", y.head(Some(5)));
 
-            // Canonicalize the formula
-            println!("4. Canonicalizing formula...");
-            let canonicalized = canonicalize(&spec);
-            let canonical_pretty = pretty(&canonicalized);
-            println!(
-                "   Canonicalized: {}",
-                color_pretty.formula(&canonical_pretty)
-            );
-            println!();
+    println!("   Fixed effects design matrix (X):");
+    println!("     - Shape: {} rows × {} columns", x.height(), x.width());
+    println!("     - Column names: {:?}", x.get_column_names());
+    println!("     - First 5 rows:");
+    println!("{}", x.head(Some(5)));
 
-            // Try to materialize the formula
-            println!("5. Materializing formula...");
-            let canonicalized = canonicalize(&spec);
-            let materialize_result =
-                materialize(&df, &canonicalized, MaterializeOptions::default());
-
-            match materialize_result {
-                Ok((y, x, z)) => {
-                    println!("   ✅ Materialization successful!");
-                    println!("   Response variable (y):");
-                    println!("     - Shape: {} rows × {} columns", y.height(), y.width());
-                    println!("     - Column names: {:?}", y.get_column_names());
-                    println!("     - First 5 rows:");
-                    println!("{}", y.head(Some(5)));
-                    println!();
-
-                    println!("   Fixed effects design matrix (X):");
-                    println!("     - Shape: {} rows × {} columns", x.height(), x.width());
-                    println!("     - Column names: {:?}", x.get_column_names());
-                    println!("     - First 5 rows:");
-                    println!("{}", x.head(Some(5)));
-                    println!();
-
-                    println!("   Random effects design matrix (Z):");
-                    println!("     - Shape: {} rows × {} columns", z.height(), z.width());
-                    println!("     - Column names: {:?}", z.get_column_names());
-                    if z.width() > 0 {
-                        println!("     - First 5 rows:");
-                        println!("{}", z.head(Some(5)));
-                    } else {
-                        println!("     - No random effects columns");
-                    }
-                    println!();
-                }
-                Err(e) => {
-                    println!("   ⚠️  Materialization failed: {}", e);
-                    println!("   This is expected for complex formulas with groups");
-                    println!("   that aren't fully implemented in materialization yet.");
-                    println!();
-                }
-            }
-
-            // Test roundtrip parsing
-            println!("6. Testing roundtrip parsing...");
-            let reparsed = p.parse(pretty_output.as_str().chars().collect::<Vec<_>>());
-            match reparsed {
-                Ok(_) => println!("   ✅ Roundtrip successful - parsed formula can be re-parsed!"),
-                Err(e) => println!("   ⚠️  Roundtrip failed: {:?}", e),
-            }
-            println!();
-        }
-        Err(e) => {
-            println!("   ❌ Formula parsing failed: {:?}", e);
-            println!();
-
-            // Try parsing simpler parts to debug
-            println!("   Debugging: Trying to parse simpler parts...");
-
-            // Try just the basic formula
-            let basic_result = p.parse("Reaction ~ Days".chars().collect::<Vec<_>>());
-            println!("   'Reaction ~ Days': {:?}", basic_result.is_ok());
-
-            // Try with group
-            let group_result = p.parse("Reaction ~ (Days | Subject)".chars().collect::<Vec<_>>());
-            println!(
-                "   'Reaction ~ (Days | Subject)': {:?}",
-                group_result.is_ok()
-            );
-
-            println!();
-        }
+    println!("   Random effects design matrix (Z):");
+    println!("     - Shape: {} rows × {} columns", z.height(), z.width());
+    println!("     - Column names: {:?}", z.get_column_names());
+    if z.height() > 0 {
+        println!("     - First 5 rows:");
+        println!("{}", z.head(Some(5)));
+    } else {
+        println!("     - No random effects columns");
     }
 
-    // Demonstrate what the parser can currently handle
-    println!("7. Current parser capabilities:");
-    println!("   ✅ Basic formulas: y ~ x");
-    println!("   ✅ Interactions: y ~ x1:x2");
-    println!("   ✅ Products: y ~ x1*x2 (expands to x1 + x2 + x1:x2)");
-    println!("   ✅ Sums: y ~ x1 + x2");
-    println!("   ✅ Functions: y ~ poly(x, 2), y ~ I(x)");
-    println!("   ✅ Powers: y ~ x^2");
-    println!("   ✅ Groups: (1|group), (Days|Subject) - now implemented!");
-    println!("   ⚠️  Smooths: s(x, k=10) - not yet implemented");
-    println!("   ⚠️  Aterms: y | weights(w) ~ x - not yet implemented");
-    println!("   ⚠️  Family: family=gaussian() y ~ x - not yet implemented");
-    println!();
+    // Test the alternative syntax
+    println!("\n6. Testing alternative syntax: (Days|Subject)");
+    let formula_str2 = "Reaction ~ 1 + Days + (Days|Subject)";
+    println!("   Formula: {}", formula_str2);
+
+    let spec2 = canonicalize(formula_str2)?;
+    println!("   Canonicalized:");
+    print_formula(&spec2);
+
+    let (y2, x2, z2) = materialize(&spec2, &df)?;
+    println!(
+        "   Z matrix shape: {} rows × {} columns",
+        z2.height(),
+        z2.width()
+    );
+    println!("   Z matrix columns: {:?}", z2.get_column_names());
 
     // Show some working examples with sleep study data
-    println!("8. Working examples with sleep study data:");
+    println!("\n7. Working examples with sleep study data:");
 
     let working_examples = vec![
         "Reaction ~ Days",
@@ -186,12 +113,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for example in working_examples {
-        let result = p.parse(example);
-        match result {
-            Ok(spec) => {
-                let canonicalized = canonicalize(&spec);
-                let pretty_output = pretty(&canonicalized);
-                println!("   ✅ {} → {}", example, pretty_output);
+        match canonicalize(example) {
+            Ok(_spec) => {
+                println!("   ✅ {} → parsed successfully", example);
             }
             Err(_) => {
                 println!("   ❌ {} → failed to parse", example);
