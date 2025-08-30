@@ -2157,7 +2157,7 @@ dependencies = [
 
 [[package]]
 name = "polars-formula"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "atty",
  "chumsky",
