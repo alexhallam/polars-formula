@@ -329,6 +329,8 @@ pub fn make_clean_names(name: &str) -> String {
                     | '\\'
                     | '`'
                     | '~'
+                    | ':'
+                    | ','
             );
 
         if is_special {
