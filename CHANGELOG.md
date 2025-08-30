@@ -1,6 +1,71 @@
 # Changelog
 
 
+## [0.3.5]
+
+### Added
+- **Enhanced group expression parsing**: The parser now supports sum expressions inside group terms, allowing both explicit and implicit syntax for mixed-effects models.
+- **Support for explicit random effects syntax**: Users can now write `(1 + Days|Subject)` in addition to the implicit `(Days|Subject)` syntax.
+
+### Changed
+- **Improved canonicalization of group expressions**: Group terms containing both intercept and variables (e.g., `(1 + Days|Subject)`) are now properly expanded into separate random intercept and random slope components.
+- **Simplified public API**: Reduced the public API to just four core functions: `canonicalize`, `materialize`, `print_formula`, and `print_modelspec`.
+
+### Fixed
+- **Parser compatibility**: Both `(1 + Days|Subject)` and `(Days|Subject)` now parse successfully and produce identical results.
+- **Random effects materialization**: Fixed issue where explicit group syntax was not properly materializing random effects matrices.
+
+### Technical Details
+
+The parser now handles sum expressions inside group terms by:
+1. **Enhanced group inner parsing**: Modified `group_inner` to properly parse `+` and `-` operators within group expressions
+2. **Improved canonicalization**: Added logic to detect when a group contains both intercept and variables, expanding them into separate random intercept and random slope groups
+
+Both syntaxes now produce identical mixed-effects models:
+```rust
+// These two formulas now produce identical results:
+"Reaction ~ 1 + Days + (1 + Days|Subject)"  // Explicit syntax
+"Reaction ~ 1 + Days + (Days|Subject)"      // Implicit syntax
+```
+
+Both expand to: `Reaction ~ 1 + Days + (1|Subject) + (0 + Days|Subject)`
+
+
+## [0.3.4] 
+
+### Changed
+- **Major API simplification**: Completely refactored the public API to provide a simpler user experience.
+- **Internal module restructuring**: Moved all internal implementation details to `src/internal/` to hide complexity from users.
+
+### Removed
+- **Public DSL modules**: Removed `pub mod dsl` and `pub mod color` from the public API.
+- **Complex types**: Removed `Formula` struct, `MaterializeOptions` struct, and utility functions from public API.
+- **Backward compatibility**: Removed all backward compatibility layers to focus on the new simplified API.
+
+### Added
+- **Four core public functions**:
+  - `canonicalize(formula: &str) -> Result<ModelSpec, Error>`: Parse and canonicalize a formula string
+  - `materialize(spec: &ModelSpec, df: &DataFrame) -> Result<(DataFrame, DataFrame, DataFrame), Error>`: Create design matrices
+  - `print_formula(spec: &ModelSpec)`: Print canonicalized formula with syntax highlighting
+  - `print_modelspec(spec: &ModelSpec)`: Print detailed model specification
+
+### Technical Details
+
+The new API provides a much simpler experience:
+```rust
+use polars_formula::{canonicalize, materialize, print_formula, print_modelspec};
+
+// Parse and canonicalize
+let spec = canonicalize("y ~ x + (1|group)")?;
+
+// Print with colors
+print_formula(&spec);
+
+// Create design matrices
+let (y, x, z) = materialize(&spec, &df)?;
+```
+
+
 ## [0.3.3]
 
 ### Added
