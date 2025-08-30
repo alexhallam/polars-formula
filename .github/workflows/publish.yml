@@ -3,7 +3,7 @@ name: publish
 on:
   push:
     tags:
-      - "v*.*.*"   # e.g., v0.1.3
+      - "v*.*.*" # e.g., v0.1.3
 
 permissions:
   contents: read
@@ -28,9 +28,12 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
+      - name: Update Cargo.lock
+        run: cargo update
+
       - name: Verify package builds (dry run)
         run: |
-          cargo publish --locked --dry-run
+          cargo publish --dry-run
 
       - name: Publish to crates.io
         env:
