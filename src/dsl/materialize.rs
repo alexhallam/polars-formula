@@ -470,7 +470,7 @@ fn materialize_expr_to_columns_with_random(
                 for (name1, series1) in cols1 {
                     for (name2, series2) in cols2 {
                         let interaction_name = format!("{}_x_{}", name1, name2);
-                        let interaction_series = (&series1 * &series2).map_err(|e| {
+                        let interaction_series = (series1 * series2).map_err(|e| {
                             Error::Semantic(format!("Failed to multiply interaction terms: {}", e))
                         })?;
                         interaction_cols.push((interaction_name, interaction_series));
@@ -481,7 +481,7 @@ fn materialize_expr_to_columns_with_random(
                 let mut result_series = None;
                 let mut interaction_name = String::new();
 
-                for (i, cols) in term_columns.iter().enumerate() {
+                for (_i, cols) in term_columns.iter().enumerate() {
                     if let Some((name, series)) = cols.first() {
                         if result_series.is_none() {
                             result_series = Some(series.clone());

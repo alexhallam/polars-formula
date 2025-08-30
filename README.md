@@ -11,7 +11,7 @@
   <img src="img/mango_pixel.png" alt="logo" width="120">
 </p>
 
-## In development
+## ⚠️ In development ⚠️
 
 This library is in development and is not yet ready for production use.
 

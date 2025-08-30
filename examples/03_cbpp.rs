@@ -6,19 +6,21 @@ use polars_formula::dsl::pretty::pretty;
 use polars_formula::{Color, Formula, MaterializeOptions};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Simple dataset
-    let df: DataFrame =
-        CsvReader::new(std::fs::File::open("examples/data/mtcars.csv")?).finish()?;
+    // print working that this is still in development
+    println!("🚧 This example is still in development is not working as expected.");
 
-    // Original formula
-    let formula_str = "mpg ~ cyl + wt*hp + poly(disp, 4) - 1";
-    // println!("Original: {}", formula_str);
+    // Load data
+    let df = CsvReader::new(std::fs::File::open("examples/data/cbpp.csv")?).finish()?;
 
-    // Colored version (original syntax preserved)
+    // Formula string
+    let formula_str: &'static str =
+        "incidence | trials(size) ~ period + (1|herd), family = binomial()";
+
+    // Colored print
     let color_pretty = Color::default();
     println!("Original:  {}", color_pretty.formula(formula_str));
 
-    // Canonicalized version (for comparison)
+    // Parse and canonicalize the formula
     let model_spec = parser()
         .parse(formula_str.chars().collect::<Vec<_>>())
         .map_err(|e| format!("Parse error: {:?}", e))?;
@@ -29,9 +31,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         color_pretty.formula(&canonicalized_str)
     );
 
-    // Materialize the formula
-    let formula = Formula::parse(formula_str)?;
+    // Parse the formula
+    let formula: Formula = Formula::parse(formula_str)?;
     let (y, x) = formula.materialize(&df, MaterializeOptions::default())?;
+
+    // Print spec
+    //println!("Spec: {}", pretty(&formula.spec));
 
     // Print the results
     println!("y: {}", y);
