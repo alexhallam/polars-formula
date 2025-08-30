@@ -21,16 +21,20 @@ impl Default for ColorConfig {
 }
 
 impl ColorConfig {
+    // Note: These methods are kept for potential future use but are currently unused
+    #[allow(dead_code)]
     /// Create a new color config with explicit enabled/disabled state
     pub fn new(enabled: bool) -> Self {
         Self { enabled }
     }
 
+    #[allow(dead_code)]
     /// Create a color config that automatically detects terminal support
     pub fn auto() -> Self {
         Self::default()
     }
 
+    #[allow(dead_code)]
     /// Disable colors
     pub fn disabled() -> Self {
         Self { enabled: false }
@@ -51,6 +55,7 @@ impl Color {
         Self::new(ColorConfig::default())
     }
 
+    #[allow(dead_code)]
     pub fn disabled() -> Self {
         Self::new(ColorConfig::disabled())
     }
@@ -83,11 +88,13 @@ impl Color {
     }
 
     /// Color a function name (uses term color as fallback)
+    #[allow(dead_code)]
     pub fn function(&self, s: &str) -> String {
         self.term(s)
     }
 
     /// Color a group expression (uses term color as fallback)
+    #[allow(dead_code)]
     pub fn group(&self, s: &str) -> String {
         self.term(s)
     }

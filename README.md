@@ -5,24 +5,42 @@
 
 <h1 align="center">polars-formula</h1>
 
-<p align="center">A formula parsing and materialization library for Rust that brings R-style/Formulaic/Patsy formula syntax to the Polars DataFrame ecosystem.</p>
 
 <p align="center">
   <img src="img/mango_pixel.png" alt="logo" width="120">
 </p>
 
+---
+<p align="center">formula in model-matrix out</p>
+
+---
+
+<p align="center">A formula parsing and materialization library for Rust that brings R-style/Formulaic/Patsy formula syntax to the Polars DataFrame ecosystem.</p>
+
+
 ## ⚠️ In development ⚠️
 
 This library is in development and is not yet ready for production use.
 
+## Motivation
+
+I wanted to work with formulas in Rust, using formula syntax. This library aims to fill that gap by providing a way to parse and materialize formulas directly into Polars DataFrames.
+
 ## 🚀 Features
 
-- **🔍 Formula Parsing**: Parse formulas like `y ~ x1 + x2 + x1:x2 + poly(x1, 3) - 1`
+- **🔍 Formula Parsing (Canonicalization)**: Parse formulas like `y ~ x1 + x2 + x1:x2 + poly(x1, 3) - 1`
 - **🧹 Clean Column Names**: Automatic cleaning of complex column names for better usability
-- **🧮 Linear Algebra Ready**: Direct conversion to [faer](https://github.com/sarah-quinones/faer-rs) matrices (optional feature)
-- **🎯 Comprehensive DSL**: Advanced parser supporting complex statistical formulas
-- **🔄 Canonicalization**: Automatic formula expansion and normalization
 - **🎨 Colored Output**: Beautiful syntax highlighting for formulas
+
+## API
+
+Only four functions are exposed:
+
+`canonicalize()` - Convert a formula string into its canonical form
+`materialize()` - Convert a formula and DataFrame into response vector and design matrix
+`print_formula()` - Print a formula with syntax highlighting
+`print_modelspec()` - Print a model specification
+
 
 ## 📦 Installation
 
@@ -30,46 +48,47 @@ Run `cargo add polars-formula` or add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-polars-formula = "0.1"
+polars-formula = "0.3.8"
 polars = { version = "0.50", features = ["lazy"] }
-```
-
-To enable linear algebra conversions to `faer`, turn on the optional feature:
-
-```toml
-[dependencies]
-polars-formula = { version = "0.1", features = ["faer"] }
 ```
 
 ## 🏃‍♂️ Quick Start
 
 ### Basic Formula Parsing, coloring, and materialization
 
+
 ```rust
+// Example 01
+// ==========
+//  If you git clone this repo, you can run this example with:
+// git clone https://github.com/alexhallam/polars-formula.git
+// cd polars-formula
+// cargo run --example 01
+use polars::prelude::*;
+use polars_formula::{canonicalize, materialize, print_formula, print_modelspec};
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Simple dataset
-    let df: DataFrame =
-        CsvReader::new(std::fs::File::open("examples/data/mtcars.csv")?).finish()?;
+    println!("=== Simple API Demo ===\n");
 
-    // Original formula
+    // Load data
+    let df = CsvReader::new(std::fs::File::open("examples/data/mtcars.csv")?).finish()?;
+
+    // Formula string
     let formula_str = "mpg ~ cyl + wt*hp + poly(disp, 4) - 1";
-    println!("Original: {}", formula_str);
 
-    // Colored version (original syntax preserved)
-    let color_pretty = Color::default();
-    println!("Colored:  {}", color_pretty.formula(formula_str));
+    // Step 1: Canonicalize (parse and canonicalize)
+    println!("\n1. Parse and canonicalize formula");
+    let spec = canonicalize(formula_str)?;
+    print_formula(&spec);
 
-    // Canonicalized version (for comparison)
-    println!("Canonicalized: {}", color_pretty.formula(formula_str));
+    // Step 2: Print the full model spec
+    println!("\n2. Full model specification:");
+    print_modelspec(&spec);
 
-    // Materialize the formula
-    let formula = Formula::parse(formula_str)?;
-    let (y, x) = formula.materialize(&df, MaterializeOptions::default())?;
-
-    // Print the results
-    println!("y: {}", y);
-    println!("X: {}", x);
-
+    // Step 3: Materialize the formula
+    println!("\n3. Materializing formula");
+    let (y, x, _z) = materialize(&spec, &df)?;
+    println!("   Results: y={}\n X={}\n", y, x);
     Ok(())
 }
 ```
@@ -78,22 +97,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   <img src="img/output.png" alt="output">
 </p>
 
-## 📚 Examples
+## 📚 Run More Examples
 
 Run the examples to see the library in action:
 
 ```bash
-# Basic formula parsing
-cargo run --example 01_simple_formula
+cargo run --example 01
+cargo run --example 02
+cargo run --example 03
 
-# Colored output demo
-cargo run --example 02_colors
-
-# Advanced DSL features
-cargo run --example 04_dsl_comprehensive
-
-# Clean names demo
-cargo run --example clean_names_demo
 ```
 
 ## 🔧 Supported Formula Syntax

@@ -1,3 +1,9 @@
+// Example 01
+// ==========
+//  If you git clone this repo, you can run this example with:
+// git clone https://github.com/alexhallam/polars-formula.git
+// cd polars-formula
+// cargo run --example 01
 use polars::prelude::*;
 use polars_formula::{canonicalize, materialize, print_formula, print_modelspec};
 

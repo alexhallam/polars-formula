@@ -257,47 +257,9 @@ pub fn print_modelspec(spec: &internal::dsl::ModelSpec) {
 ///
 /// This function converts column names to a clean format suitable for
 /// statistical modeling by:
-/// - Converting to lowercase
-/// - Replacing spaces and special characters with underscores
-/// - Handling polynomial terms and interactions
-/// - Ensuring names are valid identifiers
-///
-/// # Arguments
-///
-/// * `name` - The original column name to clean
-///
-/// # Returns
-///
-/// Returns a cleaned column name suitable for modeling.
-///
-/// # Examples
-///
-/// ```rust
-/// use polars_formula::make_clean_names;
-///
-/// // Basic cleaning
-/// assert_eq!(make_clean_names("My Column"), "my_column");
-/// assert_eq!(make_clean_names("x1:x2"), "x1_x2");
-/// assert_eq!(make_clean_names("poly(x,2)^1"), "poly_x_2_1");
-///
-/// // Polynomial terms
-/// assert_eq!(make_clean_names("poly(income,3)^2"), "poly_income_3_2");
-/// assert_eq!(make_clean_names("poly(age,2)^1"), "poly_age_2_1");
-///
-/// // Interaction terms
-/// assert_eq!(make_clean_names("treatment:dose"), "treatment_dose");
-/// assert_eq!(make_clean_names("(x1+x2):z"), "x1_x2_z");
-///
-/// // Special characters
-/// assert_eq!(make_clean_names("Column Name!"), "column_name");
-/// assert_eq!(make_clean_names("x@#$%"), "x");
-///
-/// // Edge cases
-/// assert_eq!(make_clean_names(""), "column");
-/// assert_eq!(make_clean_names("___"), "column");
-/// assert_eq!(make_clean_names("   "), "column");
-/// ```
-pub fn make_clean_names(name: &str) -> String {
+/// Internal function to clean column names by converting to lowercase,
+/// replacing special characters with underscores, and handling edge cases.
+fn make_clean_names(name: &str) -> String {
     if name.trim().is_empty() {
         return "column".to_string();
     }

@@ -6,6 +6,7 @@ use super::ast::*;
 #[derive(thiserror::Error, Debug)]
 pub enum ParseError {
     #[error("parse error: {0}")]
+    #[allow(dead_code)]
     Generic(String),
 }
 
