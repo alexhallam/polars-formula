@@ -1,0 +1,15 @@
+[package]
+name = "polars_modelmatrix"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "polars_modelmatrix"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.25", features = ["extension-module"] }
+pyo3-polars = "0.23.1"
+polars = { version = "0.43.1", default-features = false, features = ["lazy", "fmt", "dtype-date", "dtype-datetime", "dtype-time", "dtype-categorical"] }
+polars-formula = "=0.1.101"
